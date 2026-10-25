@@ -1,8 +1,9 @@
 import { ChevronDown, SlidersHorizontal } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { dosageFormOptions, formularyStatusLabel, routeOptions, updatedBuckets } from '@/config/site';
+import { DOSAGE_FORM_VOCABULARY, ROUTE_VOCABULARY, SAFETY_FLAG_LABEL } from '@/config/monograph';
+import { updatedBuckets } from '@/config/site';
 import { inBucket } from '@/services/search';
-import type { Drug, FormularyStatus, SearchFilters } from '@/types';
+import type { Drug, SafetyFlag, SearchFilters } from '@/types';
 
 export function FilterSidebar({
   drugs,
@@ -16,16 +17,24 @@ export function FilterSidebar({
   onClear: () => void;
 }) {
   const classes = unique([...drugs.map((drug) => drug.therapeuticClass), ...filters.classes]).sort((a, b) => a.localeCompare(b));
-  const routes = unique([...routeOptions, ...drugs.flatMap((drug) => drug.routes), ...filters.routes]);
-  const forms = unique([...dosageFormOptions, ...drugs.flatMap((drug) => drug.dosageForms), ...filters.forms]);
-  const statuses: FormularyStatus[] = ['preferred', 'restricted', 'non-formulary', 'pending'];
+  const routes = unique([
+    ...ROUTE_VOCABULARY,
+    ...drugs.flatMap((drug) => drug.formulations.map((item) => item.route)),
+    ...filters.routes,
+  ]);
+  const forms = unique([
+    ...DOSAGE_FORM_VOCABULARY,
+    ...drugs.flatMap((drug) => drug.formulations.map((item) => item.dosageForm)),
+    ...filters.forms,
+  ]);
+  const safetyFlags: SafetyFlag[] = ['high-alert', 'lasa', 'hazardous'];
 
   const classCounts = count(drugs.map((drug) => drug.therapeuticClass));
-  const routeCounts = count(drugs.flatMap((drug) => drug.routes));
-  const formCounts = count(drugs.flatMap((drug) => drug.dosageForms));
-  const statusCounts = count(drugs.map((drug) => drug.formularyStatus));
+  const routeCounts = count(drugs.flatMap((drug) => drug.formulations.map((item) => item.route)));
+  const formCounts = count(drugs.flatMap((drug) => drug.formulations.map((item) => item.dosageForm)));
+  const safetyCounts = count(drugs.flatMap((drug) => drug.safetyFlags));
 
-  function toggle<T extends string>(key: 'classes' | 'formulary' | 'routes' | 'forms' | 'updated', value: T) {
+  function toggle<T extends string>(key: 'classes' | 'routes' | 'forms' | 'updated' | 'safety', value: T) {
     const current = filters[key] as string[];
     const next = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
     onChange({ ...filters, [key]: next });
@@ -55,14 +64,14 @@ export function FilterSidebar({
         ))}
       </FilterGroup>
 
-      <FilterGroup title="Formulary Status">
-        {statuses.map((item) => (
+      <FilterGroup title="Medication Safety">
+        {safetyFlags.map((item) => (
           <FilterCheck
             key={item}
-            label={formularyStatusLabel[item]}
-            count={statusCounts[item] ?? 0}
-            checked={filters.formulary.includes(item)}
-            onChange={() => toggle('formulary', item)}
+            label={SAFETY_FLAG_LABEL[item]}
+            count={safetyCounts[item] ?? 0}
+            checked={filters.safety.includes(item)}
+            onChange={() => toggle('safety', item)}
           />
         ))}
       </FilterGroup>

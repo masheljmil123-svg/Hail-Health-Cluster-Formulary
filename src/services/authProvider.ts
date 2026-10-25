@@ -1,44 +1,78 @@
-import { site } from '@/config/site';
+import { accountsInitialized, verifyCredentials } from '@/services/accounts';
+import { getSupabaseConfigStatus, isSupabaseConfigured } from '@/services/supabaseClient';
 import type { AuthProvider, AuthSession } from '@/types';
 
-const SESSION_KEY = 'kssh-formulary-demo-session';
+const SESSION_KEY = 'kssh-formulary-session-v2';
+const LEGACY_SESSION_KEY = 'kssh-formulary-demo-session';
+
+function readSession(): AuthSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY) ?? localStorage.getItem(LEGACY_SESSION_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw) as AuthSession;
+    if (!session?.userId || !session.role) return null;
+    if (session.role !== 'administrator' && session.role !== 'team_member') return null;
+    // Migrate legacy demo session label
+    if ((session.mode as string) === 'demo') {
+      session.mode = 'local';
+    }
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+function writeSession(session: AuthSession | null): void {
+  localStorage.removeItem(LEGACY_SESSION_KEY);
+  if (!session) {
+    localStorage.removeItem(SESSION_KEY);
+    return;
+  }
+  localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+}
 
 /**
- * Demonstration authentication provider.
- * It keeps a local session flag only. It does not store passwords, create
- * hospital accounts, or connect to an identity provider.
- * Replace this module with a server-side provider before production use.
+ * Local multi-user authentication for development / single-browser testing.
+ * Replace with Supabase Auth (or hospital IdP) for cross-device production use.
+ * Frontend route guards are not sufficient authorization on their own.
  */
-export const demoAuthProvider: AuthProvider = {
-  id: 'demo',
-  label: 'DEMO authentication mode',
+export const localAuthProvider: AuthProvider = {
+  id: 'local',
+  label: isSupabaseConfigured()
+    ? 'Supabase authentication (configure client wiring)'
+    : 'Local team accounts (this browser only)',
   getSession() {
-    try {
-      const raw = localStorage.getItem(SESSION_KEY);
-      if (!raw) return null;
-      const session = JSON.parse(raw) as AuthSession;
-      if (session.mode !== 'demo' || session.role !== 'administrator') return null;
-      if (session.displayName !== 'Administrator') return null;
-      return session;
-    } catch {
-      return null;
-    }
+    return readSession();
   },
   async signIn({ username, password }) {
-    const normalized = username.trim().toLowerCase();
-    const accepted = normalized === site.demoUsername;
-    if (!accepted || password !== site.demoPassword) return null;
+    if (!accountsInitialized()) {
+      return null;
+    }
+    const account = await verifyCredentials(username, password);
+    if (!account) return null;
     const session: AuthSession = {
-      userId: 'demo-administrator',
-      username: site.demoUsername,
-      displayName: 'Administrator',
-      role: 'administrator',
-      mode: 'demo',
+      userId: account.id,
+      username: account.username,
+      displayName: account.displayName,
+      email: account.email,
+      role: account.role,
+      mode: 'local',
     };
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    writeSession(session);
     return session;
   },
   async signOut() {
-    localStorage.removeItem(SESSION_KEY);
+    writeSession(null);
   },
 };
+
+export function authStatusBanner(): string {
+  const supabase = getSupabaseConfigStatus();
+  if (supabase.configured) return supabase.message;
+  if (!accountsInitialized()) {
+    return 'No team accounts yet. Create the first administrator on the login page. Multi-device sync requires Supabase — see docs/BACKEND.md.';
+  }
+  return supabase.message;
+}
+
+export { localAuthProvider as demoAuthProvider };

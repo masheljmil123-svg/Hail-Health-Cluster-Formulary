@@ -1,18 +1,19 @@
-import type { ContentKind, ContentState, Drug, LibraryDocument } from '@/types';
+import type { ContentKind, ContentState, DocumentKind, Drug, LibraryDocument } from '@/types';
 import { monthKey } from '@/lib/format';
 
 export interface UpdateItem {
   id: string;
-  kind: 'drug' | 'protocol' | 'guideline' | 'education';
+  kind: 'drug' | 'protocol' | 'guideline' | 'education' | 'chemotherapy';
   title: string;
   href: string;
   lastUpdated: string;
   status: string;
 }
 
-export function collectionFor(state: ContentState, kind: 'protocol' | 'guideline' | 'education'): LibraryDocument[] {
+export function collectionFor(state: ContentState, kind: DocumentKind): LibraryDocument[] {
   if (kind === 'protocol') return state.protocols;
   if (kind === 'guideline') return state.guidelines;
+  if (kind === 'chemotherapy') return state.chemotherapy;
   return state.education;
 }
 
@@ -30,6 +31,9 @@ export function publicUpdates(state: ContentState): UpdateItem[] {
       })),
     ...state.protocols.filter((item) => item.status === 'published').map((item) => toUpdate(item, 'protocol', '/protocols')),
     ...state.guidelines.filter((item) => item.status === 'published').map((item) => toUpdate(item, 'guideline', '/guidelines')),
+    ...state.chemotherapy
+      .filter((item) => item.status === 'published')
+      .map((item) => toUpdate(item, 'chemotherapy', '/chemotherapy-protocols')),
     ...state.education.filter((item) => item.status === 'published').map((item) => toUpdate(item, 'education', '/education')),
   ];
   return items.sort((a, b) => b.lastUpdated.localeCompare(a.lastUpdated));
@@ -61,7 +65,14 @@ export function latestPublishedDate(state: ContentState): string | null {
 }
 
 export function totalRecords(state: ContentState): number {
-  return state.drugs.length + state.protocols.length + state.guidelines.length + state.education.length;
+  return (
+    state.drugs.length +
+    state.protocols.length +
+    state.guidelines.length +
+    state.education.length +
+    state.chemotherapy.length +
+    (state.therapeuticClasses?.length ?? 0)
+  );
 }
 
 export function findDrug(drugs: Drug[], id: string): Drug | undefined {
@@ -76,7 +87,8 @@ export const kindLabels: Record<UpdateItem['kind'], string> = {
   drug: 'Drug',
   protocol: 'Protocol',
   guideline: 'Guideline',
-  education: 'Patient Education',
+  education: 'Patient Counseling Materials',
+  chemotherapy: 'Chemotherapy Protocol',
 };
 
 export function auditTargetLabel(kind: ContentKind): string {
@@ -88,7 +100,11 @@ export function auditTargetLabel(kind: ContentKind): string {
     case 'guideline':
       return 'Guideline';
     case 'education':
-      return 'Patient education';
+      return 'Patient counseling materials';
+    case 'chemotherapy':
+      return 'Chemotherapy protocol';
+    case 'therapeutic-class':
+      return 'Therapeutic class';
     case 'section':
       return 'Homepage section';
     case 'media':

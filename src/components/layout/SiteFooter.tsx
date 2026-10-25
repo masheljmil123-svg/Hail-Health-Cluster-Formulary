@@ -11,7 +11,7 @@ export function SiteFooter() {
           </p>
           <p className="mt-1">{site.organizationName}</p>
           <p className="mt-2 max-w-xl leading-6">
-            Demonstration library. Sample records are not approved for clinical use.
+            Only administrator-approved and published content appears publicly.
           </p>
         </div>
         <div className="flex gap-5">

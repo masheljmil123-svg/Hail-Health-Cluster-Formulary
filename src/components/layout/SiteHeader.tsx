@@ -20,12 +20,11 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-line/80 bg-white/95 shadow-header backdrop-blur">
       <div className="mx-auto flex h-[76px] max-w-page items-center gap-4 px-4 sm:px-6">
-        <NavLink to="/" className="flex min-w-0 items-center gap-3" onClick={() => setOpen(false)}>
-          <ClusterLogo className="h-11 w-auto sm:h-12" />
-          <span className="hidden h-9 w-px bg-line md:block" />
-          <span className="hidden min-w-0 leading-tight md:block">
-            <span className="block truncate font-serif text-[16px] font-semibold text-navy">{site.hospitalName}</span>
-            <span className="block text-[13px] text-primary">{site.platformName}</span>
+        <NavLink to="/" className="flex min-w-0 max-w-[min(100%,18rem)] items-center gap-3 sm:max-w-[22rem] md:max-w-none" onClick={() => setOpen(false)}>
+          <ClusterLogo className="h-11 w-auto shrink-0 sm:h-12" />
+          <span className="hidden h-8 w-px shrink-0 bg-line sm:block" aria-hidden="true" />
+          <span className="min-w-0 font-serif text-[13px] font-semibold leading-snug text-navy sm:text-[15px] md:text-[16px]">
+            {site.platformName}
           </span>
         </NavLink>
 
@@ -70,8 +69,7 @@ export function SiteHeader() {
       {open && (
         <nav id="mobile-nav" className="border-t border-line bg-white px-4 py-3 lg:hidden" aria-label="Mobile">
           <div className="mb-3 px-2">
-            <p className="font-serif text-base font-semibold text-navy">{site.hospitalName}</p>
-            <p className="text-sm text-primary">{site.platformName}</p>
+            <p className="font-serif text-base font-semibold leading-snug text-navy">{site.platformName}</p>
           </div>
           {links.map((link) => (
             <NavLink

@@ -21,8 +21,12 @@ export function StatusBadge({ status }: { status: FormularyStatus }) {
 }
 
 const publicationStyles: Record<PublicationStatus, string> = {
+  draft: 'bg-slate-100 text-slate-700',
+  'pending-review': 'bg-sky-50 text-sky-800',
+  'changes-requested': 'bg-amber-50 text-amber-900',
+  rejected: 'bg-rose-50 text-rose-800',
+  approved: 'bg-indigo-50 text-indigo-800',
   published: 'bg-emerald-50 text-emerald-700',
-  draft: 'bg-amber-50 text-amber-800',
   archived: 'bg-slate-100 text-slate-600',
 };
 

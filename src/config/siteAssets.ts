@@ -1,5 +1,5 @@
 /**
- * Central image paths for King Salman Specialist Hospital Formulary Library.
+ * Central image paths for King Salman Specialist Hospital — Hail Health Cluster Formulary.
  * Replace the files in /public/assets without changing page layouts.
  * The logo is the official horizontal Hail Health Cluster mark from
  * https://hailthy.net/identity/ (“شعار تجمع حائل - عرضي”).

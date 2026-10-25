@@ -9,7 +9,7 @@ export function AboutPage() {
   return (
     <InfoShell eyebrow="About" title={`About the ${site.platformName}`}>
       <p>
-        The {site.platformName} is a demonstration catalog for {site.hospitalName}, part of {site.organizationName}. It shows how staff could browse medication records, protocols, guidelines, and patient education materials.
+        The {site.platformName} is the medication and clinical resource library for {site.hospitalName}, part of {site.organizationName}. Staff prepare content; only administrator-approved and published records appear publicly.
       </p>
       <p>
         Nothing in this prototype is an approved formulary, protocol, dose, or hospital policy. Clinical sections that have not been supplied display “Pending clinical review”.
@@ -27,10 +27,10 @@ export function AboutPage() {
 
 export function ResourcesPage() {
   const cards = [
-    { href: '/drug-index', title: 'Drug Index A–Z', text: 'Browse published medication records alphabetically.' },
-    { href: '/protocols', title: 'Protocols', text: 'Open demonstration protocol records.' },
-    { href: '/guidelines', title: 'Guidelines', text: 'Open demonstration guideline records.' },
-    { href: '/education', title: 'Patient Education', text: 'Open demonstration education records.' },
+    { href: '/drug-index', title: 'Drug Index A–Z', text: 'Browse published medication records alphabetically or by therapeutic class.' },
+    { href: '/protocols-guidelines', title: 'Protocols & Guidelines', text: 'Open published protocol and guideline documents.' },
+    { href: '/chemotherapy-protocols', title: 'Chemotherapy Protocols', text: 'Browse published chemotherapy protocol records when available.' },
+    { href: '/education', title: 'Patient Counseling Materials', text: 'Open published patient counseling materials.' },
     { href: '/updates', title: 'Latest Updates', text: 'See recently dated published records.' },
     { href: '/search', title: 'Search', text: 'Search by drug name, class, indication, or keyword.' },
   ];
@@ -57,7 +57,7 @@ export function HelpPage() {
       <p>Use the left-hand filters to narrow therapeutic class, formulary status, route, dosage form, and how recently a record was updated. Clear all removes those filters and keeps your query.</p>
       <h2 className="mt-6 font-serif text-2xl text-navy">Demonstration sign-in</h2>
       <p>
-        The login page has a labeled demo mode for moving between the public site and the administrator pages. It is not a hospital account and it is not secure. Open <Link className="text-primary hover:underline" to="/login">Login</Link> to see the demonstration username.
+        Staff sign in from <Link className="text-primary hover:underline" to="/login">Login</Link>. The first visit creates an administrator account. Team members are invited from Admin → Users. Multi-device sync requires Supabase (see docs/BACKEND.md).
       </p>
     </InfoShell>
   );
@@ -68,7 +68,7 @@ export function UpdatesPage() {
   const items = publicUpdates(state);
   return (
     <InfoShell eyebrow="Updates" title="Latest updates">
-      <p>Dates below are demonstration record dates, calculated from the local library.</p>
+      <p>Dates below are calculated from published records in the library.</p>
       <ul className="mt-4 divide-y divide-line">
         {items.map((item) => (
           <li key={`${item.kind}-${item.id}`} className="flex items-center justify-between gap-4 py-3">
@@ -88,7 +88,7 @@ export function UpdatesPage() {
 export function NotFoundPage() {
   return (
     <InfoShell eyebrow="404" title="Page not found">
-      <p>That address is not part of the Formulary Library.</p>
+      <p>That address is not part of the {site.platformName}.</p>
       <Link to="/" className="btn-primary mt-4">
         Return home
       </Link>

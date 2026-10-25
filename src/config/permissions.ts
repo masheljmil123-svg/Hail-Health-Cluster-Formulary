@@ -2,11 +2,17 @@ import type { Permission, RoleId } from '@/types';
 
 /**
  * Central privilege map.
- * Client checks only shape the prototype. A secure backend must enforce
- * authorization before any production deployment.
+ * Client checks shape the UI. Server/database RLS must enforce authorization
+ * before any hospital production deployment.
  */
 export const rolePermissions: Record<RoleId, readonly Permission[]> = {
   visitor: ['content:read'],
+  team_member: [
+    'content:read',
+    'content:create',
+    'content:update',
+    'content:submit',
+  ],
   reviewer: ['content:read', 'content:review'],
   administrator: [
     'content:read',
@@ -16,9 +22,12 @@ export const rolePermissions: Record<RoleId, readonly Permission[]> = {
     'content:restore',
     'content:delete',
     'content:review',
+    'content:publish',
+    'content:submit',
     'sections:manage',
     'media:manage',
     'users:view',
+    'users:manage',
     'activity:view',
     'settings:manage',
   ],
@@ -27,34 +36,42 @@ export const rolePermissions: Record<RoleId, readonly Permission[]> = {
 export const roleSummaries: Record<RoleId, { label: string; summary: string; active: boolean }> = {
   visitor: {
     label: 'Public Visitor',
-    summary: 'Can browse and search published demonstration content.',
+    summary: 'Can search and view published medications and approved public resources.',
+    active: true,
+  },
+  team_member: {
+    label: 'Team Member / Content Editor',
+    summary: 'Can create drafts, upload resources, submit for review, and revise own work. Cannot approve or publish.',
     active: true,
   },
   administrator: {
-    label: 'Administrator',
-    summary: 'Can create, edit, publish, archive, delete, and organize demonstration content.',
+    label: 'Administrator / Supervisor',
+    summary: 'Full content management: review, approve, publish, unpublish, manage users, and view audit history.',
     active: true,
   },
   reviewer: {
-    label: 'Reviewer',
-    summary: 'Reserved for a future clinical approval workflow. Not available in this prototype.',
+    label: 'Reviewer (legacy)',
+    summary: 'Reserved label; clinical approval is performed by the Administrator in the initial version.',
     active: false,
   },
 };
 
 export const permissionLabels: Record<Permission, string> = {
   'content:read': 'Browse published content',
-  'content:create': 'Create content',
-  'content:update': 'Edit and publish content',
+  'content:create': 'Create draft content',
+  'content:update': 'Edit assigned drafts',
   'content:archive': 'Archive content',
   'content:restore': 'Restore archived content',
   'content:delete': 'Delete content',
-  'content:review': 'Clinical review (reserved)',
+  'content:review': 'Review and approve submissions',
+  'content:publish': 'Publish or unpublish content',
+  'content:submit': 'Submit content for review',
   'sections:manage': 'Edit homepage sections',
-  'media:manage': 'Manage media notes',
-  'users:view': 'View the privilege map',
+  'media:manage': 'Manage media library',
+  'users:view': 'View team accounts',
+  'users:manage': 'Invite and manage team accounts',
   'activity:view': 'View the activity log',
-  'settings:manage': 'Manage prototype settings',
+  'settings:manage': 'Manage system settings',
 };
 
 export function can(role: RoleId | null | undefined, permission: Permission): boolean {

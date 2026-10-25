@@ -1,6 +1,7 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { can } from '@/config/permissions';
-import { demoAuthProvider } from '@/services/authProvider';
+import { setContentActorLabel } from '@/services/auditActor';
+import { localAuthProvider } from '@/services/authProvider';
 import type { AuthSession, Permission, RoleId } from '@/types';
 
 interface AuthContextValue {
@@ -14,19 +15,23 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<AuthSession | null>(() => demoAuthProvider.getSession());
+  const [session, setSession] = useState<AuthSession | null>(() => localAuthProvider.getSession());
+
+  useEffect(() => {
+    setContentActorLabel(session?.displayName ?? 'System');
+  }, [session]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       session,
       role: session?.role ?? 'visitor',
       async signIn(username, password) {
-        const next = await demoAuthProvider.signIn({ username, password });
+        const next = await localAuthProvider.signIn({ username, password });
         setSession(next);
         return next;
       },
       async signOut() {
-        await demoAuthProvider.signOut();
+        await localAuthProvider.signOut();
         setSession(null);
       },
       allowed(permission) {

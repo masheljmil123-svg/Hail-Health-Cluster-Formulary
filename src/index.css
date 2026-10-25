@@ -81,6 +81,242 @@ body {
   .skip-link {
     @apply sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[80] focus:rounded-lg focus:bg-navy focus:px-4 focus:py-2 focus:text-white;
   }
+
+  .prose-monograph p {
+    @apply mb-3 last:mb-0;
+  }
+
+  .prose-monograph ul {
+    @apply mb-3 list-disc space-y-1 pl-5;
+  }
+
+  .prose-monograph ol {
+    @apply mb-3 list-decimal space-y-1 pl-5;
+  }
+
+  .prose-monograph h2 {
+    @apply mb-2 mt-4 font-serif text-2xl text-navy first:mt-0;
+  }
+
+  .prose-monograph h3 {
+    @apply mb-2 mt-3 font-serif text-xl text-navy;
+  }
+
+  .prose-monograph a {
+    @apply text-primary underline underline-offset-2 hover:text-navy;
+  }
+
+  .prose-monograph table {
+    @apply mb-4 w-full border-collapse overflow-hidden rounded-xl text-sm;
+  }
+
+  .prose-monograph th,
+  .prose-monograph td {
+    @apply border border-line px-3 py-2 text-left align-top;
+  }
+
+  .prose-monograph th {
+    @apply bg-canvas font-semibold text-navy;
+  }
+
+  .ProseMirror p.is-editor-empty:first-child::before {
+    @apply pointer-events-none float-left h-0 text-slate-400;
+    content: attr(data-placeholder);
+  }
+}
+
+/* Drug Monograph page only — compact clinical reference density */
+.drug-monograph {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #16324f;
+}
+
+.drug-monograph .drug-monograph__title {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.drug-monograph .drug-monograph__section-title {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 19px;
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0;
+}
+
+.drug-monograph .drug-monograph__subtitle {
+  font-size: 13px;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.drug-monograph .drug-monograph__meta {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.drug-monograph .drug-monograph__meta-label {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.drug-monograph .drug-monograph__meta-value {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.drug-monograph .drug-monograph__toc-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.drug-monograph .drug-monograph__toc a {
+  font-size: 13px;
+  line-height: 1.35;
+  padding: 5px 8px;
+  border-radius: 8px;
+}
+
+.drug-monograph .drug-monograph__sections {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.drug-monograph .drug-monograph__section {
+  scroll-margin-top: 6.5rem;
+}
+
+.drug-monograph .drug-monograph__section-body {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.drug-monograph .drug-monograph__section-body > p,
+.drug-monograph .drug-monograph__section-body > ul,
+.drug-monograph .drug-monograph__section-body > ol,
+.drug-monograph .drug-monograph__section-body > div {
+  margin-top: 0;
+}
+
+.drug-monograph .drug-monograph__section-body ul,
+.drug-monograph .drug-monograph__section-body ol {
+  margin: 0;
+  padding-left: 1.15rem;
+}
+
+.drug-monograph .drug-monograph__section-body li + li {
+  margin-top: 2px;
+}
+
+.drug-monograph .drug-monograph__panel {
+  padding: 1.1rem 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .drug-monograph .drug-monograph__panel {
+    padding: 1.25rem 1.5rem;
+  }
+}
+
+.drug-monograph .drug-monograph__header {
+  padding-bottom: 1rem;
+  margin-bottom: 0;
+}
+
+.drug-monograph .drug-monograph__summary {
+  margin-top: 0.85rem;
+  gap: 0.65rem;
+}
+
+.drug-monograph .drug-monograph__summary-card {
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
+}
+
+.drug-monograph .drug-monograph__table {
+  font-size: 13px;
+}
+
+.drug-monograph .drug-monograph__table th,
+.drug-monograph .drug-monograph__table td {
+  padding: 0.4rem 0.55rem;
+}
+
+.drug-monograph .drug-monograph__adjust-card {
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+}
+
+.drug-monograph .drug-monograph__adjust-card dt {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.drug-monograph .drug-monograph__adjust-card dd {
+  font-size: 13px;
+  margin-top: 2px;
+  line-height: 1.45;
+}
+
+/* Compact rich-text rendering on monograph only (does not affect admin editor) */
+.drug-monograph .prose-monograph {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.drug-monograph .prose-monograph p {
+  margin-bottom: 0.5rem;
+}
+
+.drug-monograph .prose-monograph ul,
+.drug-monograph .prose-monograph ol {
+  margin-bottom: 0.5rem;
+  padding-left: 1.15rem;
+}
+
+.drug-monograph .prose-monograph li + li {
+  margin-top: 0.15rem;
+}
+
+.drug-monograph .prose-monograph h2 {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 0.65rem;
+  margin-bottom: 0.35rem;
+}
+
+.drug-monograph .prose-monograph h3,
+.drug-monograph .drug-monograph__subsection-title {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+  line-height: 1.35;
+}
+
+.drug-monograph .prose-monograph table {
+  margin-bottom: 0.65rem;
+  font-size: 13px;
+}
+
+.drug-monograph .prose-monograph th,
+.drug-monograph .prose-monograph td {
+  padding: 0.35rem 0.5rem;
 }
 
 @media (prefers-reduced-motion: reduce) {

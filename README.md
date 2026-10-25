@@ -1,6 +1,6 @@
-# King Salman Specialist Hospital — Formulary Library
+# King Salman Specialist Hospital — Hail Health Cluster Formulary
 
-Frontend prototype of the Formulary Library for **King Salman Specialist Hospital**, part of **Hail Health Cluster**. Clinicians can browse and search demonstration medication records, protocols, guidelines, and patient education materials. Administrators can manage that demonstration content from a protected-looking dashboard.
+Frontend for the **Hail Health Cluster Formulary** at **King Salman Specialist Hospital**, part of **Hail Health Cluster**. Clinicians can browse and search medication records, protocols, guidelines, and patient education materials. Administrators can manage that content from a protected dashboard.
 
 This is a local prototype. Sample records are **not approved for clinical use**.
 

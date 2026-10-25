@@ -11,18 +11,19 @@ export function HeroSearch({
   showIntro = true,
   subtitle,
   placeholder,
-  popular,
+  popular = [],
 }: {
   density?: 'home' | 'compact';
   showIntro?: boolean;
   subtitle: string;
   placeholder: string;
-  popular: string[];
+  popular?: string[];
 }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { recordSearch } = useContent();
   const [value, setValue] = useState(() => new URLSearchParams(location.search).get('q') ?? '');
+  const showPopular = density !== 'home' && showIntro && popular.length > 0;
 
   useEffect(() => {
     setValue(new URLSearchParams(location.search).get('q') ?? '');
@@ -40,7 +41,7 @@ export function HeroSearch({
   }
 
   return (
-    <section className={density === 'home' ? 'relative pb-20' : 'relative pb-10'}>
+    <section className={density === 'home' ? 'relative pb-16' : 'relative pb-10'}>
       <div className="absolute inset-0 overflow-hidden" aria-hidden="true">
         <div className="absolute inset-0 bg-gradient-to-r from-[#d4e9f7] via-[#eef6fc] to-[#e7f3fb]" />
         <div className="absolute inset-y-0 left-0 w-[68%] sm:w-[60%]">
@@ -50,20 +51,28 @@ export function HeroSearch({
         <HeroArt />
       </div>
 
-      <div className={`relative z-10 mx-auto max-w-3xl px-4 text-center sm:px-6 ${density === 'home' ? 'pb-6 pt-14 md:pt-16' : 'pb-2 pt-10 md:pt-12'}`}>
+      <div className={`relative z-10 mx-auto max-w-3xl px-4 text-center sm:px-6 ${density === 'home' ? 'pb-8 pt-14 md:pt-16' : 'pb-2 pt-10 md:pt-12'}`}>
         {showIntro && (
           <>
-            <h1 className="font-serif text-[2rem] font-semibold leading-tight text-navy sm:text-5xl">
-              {site.hospitalName}
-            </h1>
-            <p className="mt-1 font-serif text-2xl text-navy/90 sm:text-[2rem]">{site.platformName}</p>
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-ink/80 sm:text-[15px]">{subtitle}</p>
+            {density === 'home' ? (
+              <h1 className="mx-auto max-w-[16ch] px-1 font-serif text-[1.65rem] font-semibold leading-[1.15] tracking-tight text-navy sm:max-w-none sm:text-4xl md:text-[2.65rem]">
+                {site.platformName}
+              </h1>
+            ) : (
+              <>
+                <h1 className="font-serif text-[2rem] font-semibold leading-tight text-navy sm:text-5xl">
+                  {site.hospitalName}
+                </h1>
+                <p className="mt-1 px-1 font-serif text-xl leading-snug text-navy/90 sm:text-2xl">{site.platformName}</p>
+              </>
+            )}
+            <p className={`mx-auto max-w-xl text-sm leading-6 text-ink/80 sm:text-[15px] ${density === 'home' ? 'mt-3' : 'mt-4'}`}>{subtitle}</p>
           </>
         )}
 
-        <form onSubmit={onSubmit} className="mx-auto mt-7 max-w-3xl" role="search">
+        <form onSubmit={onSubmit} className={`mx-auto max-w-3xl ${density === 'home' ? 'mt-8' : 'mt-7'}`} role="search">
           <label htmlFor="formulary-search" className="sr-only">
-            Search the formulary library
+            Search the Hail Health Cluster Formulary
           </label>
           <div className="flex items-center gap-2 rounded-full bg-white p-2 shadow-search">
             <Search className="ml-3 shrink-0 text-slate-400" size={18} aria-hidden="true" />
@@ -91,7 +100,7 @@ export function HeroSearch({
           </div>
         </form>
 
-        {showIntro && popular.length > 0 && (
+        {showPopular && (
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-sm">
             <span className="text-muted">Popular searches:</span>
             {popular.map((term) => (

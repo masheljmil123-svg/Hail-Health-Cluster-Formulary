@@ -1,5 +1,7 @@
 import { updatedBuckets } from '@/config/site';
-import type { Drug, FormularyStatus, SearchFilters, SortKey } from '@/types';
+import { formatFormulationLine } from '@/services/migrateDrugs';
+import { classNamesForDrug } from '@/services/therapeuticClasses';
+import type { Drug, FormularyStatus, SafetyFlag, SearchFilters, SortKey, TherapeuticClass } from '@/types';
 
 export const emptyFilters = (): SearchFilters => ({
   classes: [],
@@ -8,6 +10,7 @@ export const emptyFilters = (): SearchFilters => ({
   forms: [],
   updated: [],
   sort: 'best',
+  safety: [],
 });
 
 export function readFilters(params: URLSearchParams): SearchFilters {
@@ -20,6 +23,7 @@ export function readFilters(params: URLSearchParams): SearchFilters {
     forms: splitParam(params.get('form')),
     updated: splitParam(params.get('updated')).filter((id) => updatedBuckets.some((bucket) => bucket.id === id)),
     sort: allowed.includes(sort as SortKey) ? (sort as SortKey) : 'best',
+    safety: splitParam(params.get('safety')).filter(isSafetyFlag),
   };
 }
 
@@ -32,6 +36,7 @@ export function writeSearchParams(query: string, filters: SearchFilters): URLSea
   if (filters.routes.length) params.set('route', filters.routes.join(','));
   if (filters.forms.length) params.set('form', filters.forms.join(','));
   if (filters.updated.length) params.set('updated', filters.updated.join(','));
+  if (filters.safety.length) params.set('safety', filters.safety.join(','));
   return params;
 }
 
@@ -50,12 +55,17 @@ export function applyFilters(
   matched: Array<{ drug: Drug; score: number }>,
   filters: SearchFilters,
   now = new Date(),
+  classes: TherapeuticClass[] = [],
 ): Array<{ drug: Drug; score: number }> {
   return matched.filter(({ drug }) => {
-    if (filters.classes.length && !filters.classes.includes(drug.therapeuticClass)) return false;
+    if (filters.classes.length) {
+      const names = classNamesForDrug(drug, classes);
+      if (!filters.classes.some((name) => names.includes(name) || drug.therapeuticClass === name)) return false;
+    }
     if (filters.formulary.length && !filters.formulary.includes(drug.formularyStatus)) return false;
-    if (filters.routes.length && !drug.routes.some((route) => filters.routes.includes(route))) return false;
-    if (filters.forms.length && !drug.dosageForms.some((form) => filters.forms.includes(form))) return false;
+    if (filters.routes.length && !drug.formulations.some((form) => filters.routes.includes(form.route))) return false;
+    if (filters.forms.length && !drug.formulations.some((form) => filters.forms.includes(form.dosageForm))) return false;
+    if (filters.safety.length && !filters.safety.every((flag) => drug.safetyFlags.includes(flag))) return false;
     if (filters.updated.length && !filters.updated.some((bucket) => inBucket(drug.lastUpdated, bucket, now))) {
       return false;
     }
@@ -93,6 +103,10 @@ export function inBucket(isoDate: string, bucket: string, now = new Date()): boo
   return false;
 }
 
+export function formulationSummary(drug: Drug): string[] {
+  return drug.formulations.map(formatFormulationLine);
+}
+
 function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
@@ -112,18 +126,21 @@ function scoreDrug(drug: Drug, query: string): number {
 
 function scoreToken(drug: Drug, token: string): number {
   const generic = drug.genericName.toLowerCase();
-  const brand = drug.brandName.toLowerCase();
+  const brands = (drug.brandNames ?? []).map((item) => item.toLowerCase());
+  const synonyms = (drug.synonyms ?? []).map((item) => item.toLowerCase());
   if (generic === token) return 100;
   if (generic.startsWith(token)) return 80;
   if (generic.includes(token)) return 60;
-  if (brand && (brand === token || brand.includes(token))) return 50;
+  if (brands.some((brand) => brand === token || brand.includes(token))) return 50;
+  if (synonyms.some((synonym) => synonym === token || synonym.includes(token))) return 45;
   if (drug.pharmacologicalClass.toLowerCase().includes(token)) return 35;
   if (drug.therapeuticClass.toLowerCase().includes(token)) return 35;
+  if ((drug.therapeuticClassIds ?? []).some((id) => id.toLowerCase().includes(token))) return 30;
   if (drug.keywords.some((keyword) => keyword.toLowerCase().includes(token))) return 30;
   if (drug.indicationsSummary.toLowerCase().includes(token)) return 20;
-  if (drug.formulations.some((item) => item.toLowerCase().includes(token))) return 15;
-  if (drug.routes.some((item) => item.toLowerCase().includes(token))) return 12;
-  if (drug.dosageForms.some((item) => item.toLowerCase().includes(token))) return 12;
+  if (drug.formulations.some((form) => formatFormulationLine(form).toLowerCase().includes(token))) return 15;
+  if (drug.formulations.some((form) => form.route.toLowerCase().includes(token))) return 12;
+  if (drug.formulations.some((form) => form.dosageForm.toLowerCase().includes(token))) return 12;
   return 0;
 }
 
@@ -137,6 +154,10 @@ function splitParam(value: string | null): string[] {
 
 function isFormularyStatus(value: string): value is FormularyStatus {
   return value === 'preferred' || value === 'restricted' || value === 'non-formulary' || value === 'pending';
+}
+
+function isSafetyFlag(value: string): value is SafetyFlag {
+  return value === 'high-alert' || value === 'lasa' || value === 'hazardous';
 }
 
 export function countBy<T extends string>(items: T[], universe: readonly T[]): Record<string, number> {

@@ -1,7 +1,23 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createSeedState } from '@/data/seed';
+import { createEmptyState } from '@/data/seed';
 import { newId } from '@/lib/format';
-import { CONTENT_STORAGE_KEY, clearContentState, loadContentState, saveContentState } from '@/services/storage';
+import { loadAccounts } from '@/services/accounts';
+import { getContentActorLabel } from '@/services/auditActor';
+import { dispatchWorkflowEmail } from '@/services/emailNotifications';
+import { notifyAdministrators, pushNotification } from '@/services/notifications';
+import {
+  CONTENT_STORAGE_KEY,
+  analyzeAndPurgeDemoRecords,
+  clearContentState,
+  loadContentState,
+  saveContentState,
+} from '@/services/storage';
+import { syncPrimaryClassName } from '@/services/therapeuticClasses';
+import {
+  applyWorkflowTransition,
+  finalizeDocumentPublish,
+  finalizeDrugPublish,
+} from '@/services/workflow';
 import type {
   AuditLogEntry,
   ContentKind,
@@ -11,6 +27,9 @@ import type {
   HomepageSection,
   LibraryDocument,
   MediaRecord,
+  PublicationStatus,
+  ReviewAction,
+  TherapeuticClass,
 } from '@/types';
 
 type ItemKind = 'drug' | DocumentKind;
@@ -21,6 +40,19 @@ interface ContentApi {
   saveDocument: (kind: DocumentKind, document: LibraryDocument, isNew: boolean) => void;
   setStatus: (kind: ItemKind, id: string, status: Drug['status']) => void;
   deleteItem: (kind: ItemKind, id: string) => void;
+  applyReview: (
+    kind: ItemKind,
+    id: string,
+    action: ReviewAction,
+    actor: { id: string; label: string; role: string },
+    note?: string,
+    /** When provided, upsert this item in the same transaction (avoids stale state after save). */
+    itemOverride?: Drug | LibraryDocument,
+  ) => { ok: true } | { ok: false; error: string };
+  saveTherapeuticClass: (item: TherapeuticClass, isNew: boolean, assignedDrugIds: string[]) => void;
+  setTherapeuticClassStatus: (id: string, status: PublicationStatus) => void;
+  deleteTherapeuticClass: (id: string) => void;
+  moveTherapeuticClass: (id: string, direction: -1 | 1) => void;
   updateSection: (section: HomepageSection) => void;
   moveSection: (id: string, direction: -1 | 1) => void;
   addSection: (input: { title: string; description: string; linkLabel: string; linkHref: string }) => void;
@@ -35,23 +67,33 @@ interface ContentApi {
 
 const ContentContext = createContext<ContentApi | null>(null);
 
-function makeAudit(partial: Omit<AuditLogEntry, 'id' | 'actorLabel' | 'timestamp'>): AuditLogEntry {
+function makeAudit(partial: Omit<AuditLogEntry, 'id' | 'actorLabel' | 'timestamp'> & { actorLabel?: string }): AuditLogEntry {
   return {
     ...partial,
     id: newId('audit'),
-    actorLabel: 'Administrator',
+    actorLabel: partial.actorLabel ?? getContentActorLabel(),
     timestamp: new Date().toISOString(),
   };
+}
+
+function auditActionForReview(action: ReviewAction): AuditLogEntry['action'] {
+  if (action === 'submit' || action === 'resubmit') return 'submitted';
+  if (action === 'approve' || action === 'approve-publish') return 'approved';
+  if (action === 'reject') return 'rejected';
+  if (action === 'request-changes') return 'changes-requested';
+  if (action === 'publish') return 'published';
+  return 'updated';
 }
 
 function withAudit(state: ContentState, entry: AuditLogEntry): ContentState {
   return { ...state, audit: [entry, ...state.audit].slice(0, 300) };
 }
 
-function keyFor(kind: ItemKind): 'drugs' | 'protocols' | 'guidelines' | 'education' {
+function keyFor(kind: ItemKind): 'drugs' | 'protocols' | 'guidelines' | 'education' | 'chemotherapy' {
   if (kind === 'drug') return 'drugs';
   if (kind === 'protocol') return 'protocols';
   if (kind === 'guideline') return 'guidelines';
+  if (kind === 'chemotherapy') return 'chemotherapy';
   return 'education';
 }
 
@@ -62,13 +104,31 @@ function labelOf(item: Drug | LibraryDocument): string {
 export function ContentProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<ContentState>(() => loadContentState());
 
+  // Re-run purge after mount so stale in-memory demo state (e.g. HMR) cannot stick.
   useEffect(() => {
+    setState(loadContentState());
+  }, []);
+
+  useEffect(() => {
+    const { state: purged, report } = analyzeAndPurgeDemoRecords(state);
+    if (report.totalRemoved > 0) {
+      // Drop confirmed demo records from React state immediately; do not re-persist them.
+      setState(purged);
+      saveContentState(purged);
+      return;
+    }
     saveContentState(state);
   }, [state]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
-      if (event.key === CONTENT_STORAGE_KEY) setState(loadContentState());
+      if (
+        event.key === CONTENT_STORAGE_KEY ||
+        event.key === 'kssh-formulary-content-v2' ||
+        event.key === 'kssh-formulary-content-v1'
+      ) {
+        setState(loadContentState());
+      }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
@@ -79,18 +139,105 @@ export function ContentProvider({ children }: { children: ReactNode }) {
       state,
       saveDrug(drug, isNew) {
         setState((current) => {
+          const normalized = syncPrimaryClassName(
+            {
+              ...drug,
+              therapeuticClassIds: Array.isArray(drug.therapeuticClassIds) ? drug.therapeuticClassIds : [],
+            },
+            current.therapeuticClasses,
+          );
           const drugs = isNew
-            ? [drug, ...current.drugs.filter((item) => item.id !== drug.id)]
-            : current.drugs.map((item) => (item.id === drug.id ? drug : item));
+            ? [normalized, ...current.drugs.filter((item) => item.id !== normalized.id)]
+            : current.drugs.map((item) => (item.id === normalized.id ? normalized : item));
           return withAudit(
             { ...current, drugs },
             makeAudit({
               action: isNew ? 'created' : 'updated',
               targetType: 'drug',
-              targetId: drug.id,
-              targetLabel: drug.genericName,
+              targetId: normalized.id,
+              targetLabel: normalized.genericName,
             }),
           );
+        });
+      },
+      saveTherapeuticClass(item, isNew, assignedDrugIds) {
+        setState((current) => {
+          const previous = current.therapeuticClasses.find((entry) => entry.id === item.id);
+          const therapeuticClasses = isNew
+            ? [...current.therapeuticClasses, item]
+            : current.therapeuticClasses.map((entry) => (entry.id === item.id ? item : entry));
+          const assigned = new Set(assignedDrugIds);
+          const drugs = current.drugs.map((drug) => {
+            const without = (drug.therapeuticClassIds ?? []).filter((id) => id !== item.id);
+            const nextIds = assigned.has(drug.id) ? [...without, item.id] : without;
+            return syncPrimaryClassName({ ...drug, therapeuticClassIds: nextIds }, therapeuticClasses);
+          });
+          return withAudit(
+            { ...current, therapeuticClasses, drugs },
+            makeAudit({
+              action: isNew ? 'created' : previous?.name !== item.name ? 'updated' : 'updated',
+              targetType: 'therapeutic-class',
+              targetId: item.id,
+              targetLabel: item.name,
+            }),
+          );
+        });
+      },
+      setTherapeuticClassStatus(id, status) {
+        setState((current) => {
+          const existing = current.therapeuticClasses.find((item) => item.id === id);
+          if (!existing) return current;
+          const therapeuticClasses = current.therapeuticClasses.map((item) =>
+            item.id === id ? { ...item, status } : item,
+          );
+          const action = status === 'archived' ? 'archived' : status === 'published' ? 'published' : 'restored';
+          return withAudit(
+            { ...current, therapeuticClasses },
+            makeAudit({
+              action,
+              targetType: 'therapeutic-class',
+              targetId: id,
+              targetLabel: existing.name,
+            }),
+          );
+        });
+      },
+      deleteTherapeuticClass(id) {
+        setState((current) => {
+          const existing = current.therapeuticClasses.find((item) => item.id === id);
+          if (!existing) return current;
+          const therapeuticClasses = current.therapeuticClasses.filter((item) => item.id !== id);
+          const drugs = current.drugs.map((drug) =>
+            syncPrimaryClassName(
+              {
+                ...drug,
+                therapeuticClassIds: (drug.therapeuticClassIds ?? []).filter((classId) => classId !== id),
+              },
+              therapeuticClasses,
+            ),
+          );
+          return withAudit(
+            { ...current, therapeuticClasses, drugs },
+            makeAudit({
+              action: 'deleted',
+              targetType: 'therapeutic-class',
+              targetId: id,
+              targetLabel: existing.name,
+            }),
+          );
+        });
+      },
+      moveTherapeuticClass(id, direction) {
+        setState((current) => {
+          const sorted = [...current.therapeuticClasses].sort((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+          const index = sorted.findIndex((item) => item.id === id);
+          const target = index + direction;
+          if (index < 0 || target < 0 || target >= sorted.length) return current;
+          const reordered = [...sorted];
+          const [moved] = reordered.splice(index, 1);
+          reordered.splice(target, 0, moved);
+          const therapeuticClasses = reordered.map((item, itemIndex) => ({ ...item, order: itemIndex + 1 }));
+          return { ...current, therapeuticClasses };
         });
       },
       saveDocument(kind, document, isNew) {
@@ -117,8 +264,12 @@ export function ContentProvider({ children }: { children: ReactNode }) {
           const items = current[key] as Array<Drug | LibraryDocument>;
           const existing = items.find((item) => item.id === id);
           if (!existing) return current;
+          // Team members must not publish via direct status mutation — only through applyReview.
+          if (status === 'published' || status === 'approved') {
+            return current;
+          }
           const next = items.map((item) => (item.id === id ? { ...item, status } : item));
-          const action = status === 'archived' ? 'archived' : status === 'published' ? 'published' : 'restored';
+          const action = status === 'archived' ? 'archived' : 'restored';
           return withAudit(
             { ...current, [key]: next },
             makeAudit({
@@ -129,6 +280,129 @@ export function ContentProvider({ children }: { children: ReactNode }) {
             }),
           );
         });
+      },
+      applyReview(kind, id, action, actor, note, itemOverride) {
+        if ((action === 'approve' || action === 'publish' || action === 'approve-publish' || action === 'reject' || action === 'request-changes') && actor.role !== 'administrator') {
+          return { ok: false, error: 'Only the administrator may approve, publish, reject, or request changes.' };
+        }
+        if ((action === 'submit' || action === 'resubmit') && actor.role !== 'administrator' && actor.role !== 'team_member') {
+          return { ok: false, error: 'Not authorized to submit content.' };
+        }
+
+        let error: string | null = null;
+        setState((current) => {
+          const key = keyFor(kind);
+          const items = current[key] as Array<Drug | LibraryDocument>;
+          const existing = itemOverride ?? items.find((item) => item.id === id);
+          if (!existing) {
+            error = 'Record not found.';
+            return current;
+          }
+          try {
+            let updated = applyWorkflowTransition(existing, action, { id: actor.id, label: actor.label }, note);
+            if (action === 'publish' || action === 'approve-publish') {
+              updated =
+                kind === 'drug'
+                  ? finalizeDrugPublish(updated as Drug)
+                  : finalizeDocumentPublish(updated as LibraryDocument);
+            }
+            const found = items.some((item) => item.id === id);
+            const next = found
+              ? items.map((item) => (item.id === id ? updated : item))
+              : [updated, ...items];
+            const title = labelOf(updated);
+            const href =
+              kind === 'drug'
+                ? `/admin/drugs/${id}`
+                : kind === 'education'
+                  ? `/admin/education/${id}`
+                  : kind === 'chemotherapy'
+                    ? `/admin/chemotherapy/${id}`
+                    : kind === 'guideline'
+                      ? `/admin/guidelines/${id}`
+                      : `/admin/protocols/${id}`;
+            const reviewHref = `/admin/review-requests/${kind}/${id}`;
+
+            if (action === 'submit' || action === 'resubmit') {
+              notifyAdministrators(loadAccounts(), {
+                title: `New Review Request: ${title}`,
+                message: `${title} submitted by ${actor.label}.`,
+                relatedType: kind === 'drug' ? 'drug' : kind,
+                relatedId: id,
+                href: reviewHref,
+              });
+              void dispatchWorkflowEmail({
+                event: 'submission',
+                toUserId: 'administrators',
+                contentTitle: title,
+                status: 'pending-review',
+                securePath: reviewHref,
+              });
+            } else if (existing.authorId) {
+              const authorMessages: Partial<Record<ReviewAction, { title: string; message: string; event: 'changes-requested' | 'rejected' | 'approved' | 'published' }>> = {
+                'request-changes': {
+                  title: 'Changes requested',
+                  message: `The administrator requested changes on “${title}”.${note ? ` Feedback: ${note}` : ''}`,
+                  event: 'changes-requested',
+                },
+                reject: {
+                  title: 'Submission rejected',
+                  message: `“${title}” was rejected.${note ? ` Reason: ${note}` : ''}`,
+                  event: 'rejected',
+                },
+                approve: {
+                  title: 'Submission approved',
+                  message: `Your submitted item “${title}” has been approved by the administrator.`,
+                  event: 'approved',
+                },
+                publish: {
+                  title: 'Content published',
+                  message: `“${title}” is now published on the public library.`,
+                  event: 'published',
+                },
+                'approve-publish': {
+                  title: 'Content approved and published',
+                  message: `“${title}” was approved and published on the public library.`,
+                  event: 'published',
+                },
+              };
+              const msg = authorMessages[action];
+              if (msg) {
+                pushNotification({
+                  userId: existing.authorId,
+                  title: msg.title,
+                  message: msg.message,
+                  relatedType: kind === 'drug' ? 'drug' : kind,
+                  relatedId: id,
+                  href: actor.role === 'administrator' ? href : `/workspace`,
+                });
+                void dispatchWorkflowEmail({
+                  event: msg.event,
+                  toUserId: existing.authorId,
+                  contentTitle: title,
+                  status: updated.status,
+                  securePath: '/workspace',
+                });
+              }
+            }
+
+            return withAudit(
+              { ...current, [key]: next },
+              makeAudit({
+                action: auditActionForReview(action),
+                targetType: kind as ContentKind,
+                targetId: id,
+                targetLabel: title,
+                actorLabel: actor.label,
+                note,
+              }),
+            );
+          } catch (err) {
+            error = err instanceof Error ? err.message : 'Review action failed.';
+            return current;
+          }
+        });
+        return error ? { ok: false, error } : { ok: true };
       },
       deleteItem(kind, id) {
         setState((current) => {
@@ -302,15 +576,14 @@ export function ContentProvider({ children }: { children: ReactNode }) {
       },
       resetDemo() {
         clearContentState();
-        const next = createSeedState();
+        const next = createEmptyState();
         next.audit = [
           makeAudit({
             action: 'reset',
             targetType: 'settings',
-            targetId: 'demo-data',
-            targetLabel: 'Demonstration library',
+            targetId: 'library-reset',
+            targetLabel: 'Content library reset to empty',
           }),
-          ...next.audit,
         ];
         setState(next);
       },

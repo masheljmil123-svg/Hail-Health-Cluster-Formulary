@@ -1,13 +1,11 @@
 export const site = {
   hospitalName: 'King Salman Specialist Hospital',
-  platformName: 'Formulary Library',
+  platformName: 'Hail Health Cluster Formulary',
   organizationName: 'Hail Health Cluster',
   organizationNameAr: 'تجمع حائل الصحي',
   tagline:
     'Trusted, evidence-based medication and clinical information for safe and effective prescribing.',
   identityUrl: 'https://hailthy.net/identity/',
-  demoUsername: 'administrator',
-  demoPassword: 'formulary-demo',
   searchPlaceholder: 'Search by drug name, class, indication, or keyword...',
 } as const;
 
@@ -22,6 +20,10 @@ export const formularyStatusLabel = {
 
 export const publicationStatusLabel = {
   draft: 'Draft',
+  'pending-review': 'Pending Review',
+  'changes-requested': 'Changes Requested',
+  rejected: 'Rejected',
+  approved: 'Approved',
   published: 'Published',
   archived: 'Archived',
 } as const;

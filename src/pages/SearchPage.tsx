@@ -18,7 +18,10 @@ export function SearchPage() {
   const hero = state.sections.find((section) => section.kind === 'hero');
 
   const matched = useMemo(() => matchDrugs(state.drugs, query), [state.drugs, query]);
-  const filtered = useMemo(() => applyFilters(matched, filters), [matched, filters]);
+  const filtered = useMemo(
+    () => applyFilters(matched, filters, new Date(), state.therapeuticClasses),
+    [matched, filters, state.therapeuticClasses],
+  );
   const results = useMemo(() => sortResults(filtered, filters.sort, Boolean(query.trim())), [filtered, filters.sort, query]);
   const saved = state.savedSearches.some((item) => item.toLowerCase() === query.trim().toLowerCase());
 
@@ -37,9 +40,9 @@ export function SearchPage() {
   }
 
   function exportResults() {
-    const header = ['Generic name', 'Brand', 'Pharmacological class', 'Therapeutic class', 'Formulary status', 'Updated', 'Version'];
+    const header = ['Generic name', 'Brand names', 'Pharmacological class', 'Therapeutic class', 'Safety flags', 'Updated', 'Version'];
     const lines = results.map((drug) =>
-      [drug.genericName, drug.brandName, drug.pharmacologicalClass, drug.therapeuticClass, drug.formularyStatus, drug.lastUpdated, drug.version]
+      [drug.genericName, drug.brandNames.join('; '), drug.pharmacologicalClass, drug.therapeuticClass, drug.safetyFlags.join('; '), drug.lastUpdated, drug.version]
         .map(csvCell)
         .join(','),
     );
@@ -119,7 +122,9 @@ export function SearchPage() {
 
           {results.length === 0 ? (
             <div className="panel px-6 py-16 text-center">
-              <h3 className="font-serif text-2xl text-navy">No medications match this search</h3>
+              <h3 className="font-serif text-2xl text-navy">No medications available yet.</h3>
+              <p className="mt-2 text-sm text-muted">Approved medications will appear here once published.</p>
+              <p className="mt-4 text-sm text-muted">No medications match this search.</p>
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
                 Try another drug name, class, or keyword, or clear the filters.
               </p>

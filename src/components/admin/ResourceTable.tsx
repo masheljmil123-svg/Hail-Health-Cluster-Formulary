@@ -57,20 +57,36 @@ export function ResourceTable({
           className="ui-input sm:max-w-sm"
         />
         <div className="flex flex-wrap gap-2">
-          {(['all', 'published', 'draft', 'archived'] as const).map((item) => (
+          {(
+            [
+              'all',
+              'draft',
+              'pending-review',
+              'changes-requested',
+              'approved',
+              'published',
+              'rejected',
+              'archived',
+            ] as const
+          ).map((item) => (
             <button
               key={item}
               type="button"
               onClick={() => setStatus(item)}
               className={`rounded-full px-3 py-2 text-sm ${status === item ? 'bg-navy text-white' : 'bg-white text-navy shadow-sm'}`}
             >
-              {item === 'all' ? 'All' : item[0].toUpperCase() + item.slice(1)}
+              {item === 'all' ? 'All' : item.split('-').map((part) => part[0].toUpperCase() + part.slice(1)).join(' ')}
             </button>
           ))}
         </div>
       </div>
 
-      {visible.length === 0 ? (
+      {rows.length === 0 ? (
+        <div className="panel p-10 text-center">
+          <p className="font-serif text-2xl text-navy">No {noun} added yet.</p>
+          <p className="mt-2 text-sm text-muted">Start by adding your first record. Approved content will appear on the public site once published.</p>
+        </div>
+      ) : visible.length === 0 ? (
         <div className="panel p-8 text-sm text-muted">No {noun} match this view.</div>
       ) : (
         <div className="space-y-3">

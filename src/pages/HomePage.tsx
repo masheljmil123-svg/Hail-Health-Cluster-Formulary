@@ -20,7 +20,6 @@ export function HomePage() {
         showIntro={hero?.visible !== false}
         subtitle={hero?.description || site.tagline}
         placeholder={hero?.searchPlaceholder || site.searchPlaceholder}
-        popular={hero?.visible === false ? [] : hero?.popularSearches ?? []}
       />
 
       <div className="relative z-10 mx-auto -mt-16 max-w-page space-y-5 px-4 sm:px-6">

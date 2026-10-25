@@ -1,4 +1,4 @@
-import { ArrowUpRight, BookOpen, FileText, Pill, Users } from 'lucide-react';
+import { ArrowUpRight, BookOpen, BookOpenCheck, FileText, Pill, Ribbon, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { kindLabels, type UpdateItem } from '@/services/library';
 import type { FeatureAccent, FeatureIcon, HomepageSection, SearchCount } from '@/types';
@@ -9,6 +9,8 @@ const icons: Record<FeatureIcon, typeof Pill> = {
   pill: Pill,
   file: FileText,
   book: BookOpen,
+  'book-check': BookOpenCheck,
+  ribbon: Ribbon,
   users: Users,
 };
 
@@ -16,6 +18,7 @@ const accents: Record<FeatureAccent, { card: string; icon: string; arrow: string
   blue: { card: 'bg-[#f3f8fd]', icon: 'bg-[#e7f1fb] text-[#145A91]', arrow: 'border-[#d5e6f6] text-[#145A91]' },
   green: { card: 'bg-[#f3faf6]', icon: 'bg-[#e5f6ee] text-[#12815f]', arrow: 'border-[#d5efe4] text-[#12815f]' },
   amber: { card: 'bg-[#fdf8f1]', icon: 'bg-[#f8efdf] text-[#c4842a]', arrow: 'border-[#f0e3cc] text-[#c4842a]' },
+  peach: { card: 'bg-[#fff5f0]', icon: 'bg-[#ffe8dc] text-[#d97757]', arrow: 'border-[#f7d7c8] text-[#d97757]' },
   lavender: { card: 'bg-[#f7f5fc]', icon: 'bg-[#efeaf8] text-[#7A5BB5]', arrow: 'border-[#e4dcf2] text-[#7A5BB5]' },
 };
 
@@ -24,6 +27,7 @@ const kindStyles: Record<UpdateItem['kind'], string> = {
   protocol: 'bg-[#e5f6ee] text-[#12815f]',
   guideline: 'bg-[#f8efdf] text-[#c4842a]',
   education: 'bg-[#efeaf8] text-[#7A5BB5]',
+  chemotherapy: 'bg-[#ffe8dc] text-[#d97757]',
 };
 
 export function FeatureGrid({ sections }: { sections: HomepageSection[] }) {
@@ -45,7 +49,7 @@ export function FeatureGrid({ sections }: { sections: HomepageSection[] }) {
             <span className={cn('grid h-12 w-12 place-items-center rounded-2xl', accent.icon)}>
               <Icon size={22} />
             </span>
-            <h2 className="mt-4 font-serif text-xl text-navy">{section.title}</h2>
+            <h2 className="mt-4 font-serif text-[1.15rem] leading-snug text-navy sm:text-xl">{section.title}</h2>
             <p className="mt-1 pr-6 text-sm leading-6 text-muted">{section.description}</p>
           </Link>
         );
@@ -69,7 +73,7 @@ export function UpdatesPanel({ section, items }: { section: HomepageSection; ite
         )}
       </div>
       <ul className="mt-5 divide-y divide-line">
-        {items.length === 0 && <li className="py-6 text-sm text-muted">No published demonstration records yet.</li>}
+        {items.length === 0 && <li className="py-6 text-sm text-muted">No published updates yet. Approved content will appear here once published.</li>}
         {items.map((item) => (
           <li key={`${item.kind}-${item.id}`}>
             <Link to={item.href} className="flex items-center gap-3 py-3.5 transition hover:bg-clinical/40">
@@ -98,7 +102,7 @@ export function TrendingPanel({ section, counts }: { section: HomepageSection; c
     <section className="panel h-full min-w-0 p-6 sm:p-7">
       <h2 className="font-serif text-2xl text-navy">{section.title}</h2>
       <p className="mt-1 text-sm text-muted">{section.description}</p>
-      <p className="mt-1 text-xs text-muted">Demonstration activity stored in this browser.</p>
+      <p className="mt-1 text-xs text-muted">Based on real search activity in this library.</p>
       <ol className="mt-5 space-y-4">
         {top.length === 0 && <li className="text-sm text-muted">Searches will appear here after visitors use the library.</li>}
         {top.map((item, index) => (
@@ -138,5 +142,6 @@ function KindIcon({ kind }: { kind: UpdateItem['kind'] }) {
   if (kind === 'drug') return <Pill size={16} />;
   if (kind === 'protocol') return <FileText size={16} />;
   if (kind === 'guideline') return <BookOpen size={16} />;
+  if (kind === 'chemotherapy') return <Ribbon size={16} />;
   return <Users size={16} />;
 }

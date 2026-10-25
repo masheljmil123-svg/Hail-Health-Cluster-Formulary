@@ -1,4 +1,4 @@
-import { ArrowUpRight, BookOpen, Calendar, FileText, Pill, Users } from 'lucide-react';
+import { ArrowUpRight, BookOpen, Calendar, FileText, Layers, Pill, Ribbon, Users } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HospitalPhoto } from '@/components/brand/HospitalPhoto';
@@ -9,10 +9,14 @@ import { inBucket } from '@/services/search';
 import type { AuditLogEntry } from '@/types';
 
 const shortcuts = [
+  { href: '/admin/review-requests', title: 'Review Requests', text: 'Review team submissions, request changes, approve, and publish.', icon: FileText, accent: 'bg-[#eef6fb] text-[#145A91]' },
   { href: '/admin/drugs', title: 'Manage Drugs', text: 'Add new medications, edit existing content, and manage formulary status.', icon: Pill, accent: 'bg-[#f3f8fd] text-[#145A91]' },
+  { href: '/admin/therapeutic-classes', title: 'Therapeutic Classes', text: 'Organize classes, subclasses, and medication assignments for the Drug Index.', icon: Layers, accent: 'bg-[#eef6fb] text-[#1d6fa5]' },
   { href: '/admin/protocols', title: 'Manage Protocols', text: 'Upload and manage therapeutic protocol records and pathways.', icon: FileText, accent: 'bg-[#f3faf6] text-[#12815f]' },
   { href: '/admin/guidelines', title: 'Manage Guidelines', text: 'Add clinical practice guideline records and evidence placeholders.', icon: BookOpen, accent: 'bg-[#fdf8f1] text-[#c4842a]' },
-  { href: '/admin/education', title: 'Manage Patient Education', text: 'Create and manage patient information leaflets and counseling materials.', icon: Users, accent: 'bg-[#f7f5fc] text-[#7A5BB5]' },
+  { href: '/admin/chemotherapy', title: 'Manage Chemotherapy', text: 'Add chemotherapy protocol catalog records and optional PDF attachments.', icon: Ribbon, accent: 'bg-[#fff5f0] text-[#d97757]' },
+  { href: '/admin/education', title: 'Manage Counseling Materials', text: 'Upload patient counseling documents and educational materials.', icon: Users, accent: 'bg-[#f7f5fc] text-[#7A5BB5]' },
+  { href: '/admin/users', title: 'Users & Permissions', text: 'Invite team members and manage roles.', icon: Users, accent: 'bg-[#f3f8fd] text-[#145A91]' },
 ];
 
 export function DashboardPage() {
@@ -24,7 +28,8 @@ export function DashboardPage() {
       { label: 'Drugs', value: state.drugs.filter((item) => item.status === 'published' && within(item.lastUpdated)).length, delta: updatedThisMonth(state.drugs), href: '/admin/drugs', icon: Pill, accent: 'bg-[#f3f8fd] text-[#145A91]', bar: '#3B82C4' },
       { label: 'Protocols', value: state.protocols.filter((item) => item.status === 'published' && within(item.lastUpdated)).length, delta: updatedThisMonth(state.protocols), href: '/admin/protocols', icon: FileText, accent: 'bg-[#f3faf6] text-[#12815f]', bar: '#3EAA7A' },
       { label: 'Guidelines', value: state.guidelines.filter((item) => item.status === 'published' && within(item.lastUpdated)).length, delta: updatedThisMonth(state.guidelines), href: '/admin/guidelines', icon: BookOpen, accent: 'bg-[#fdf8f1] text-[#c4842a]', bar: '#E0A15A' },
-      { label: 'Patient Education', value: state.education.filter((item) => item.status === 'published' && within(item.lastUpdated)).length, delta: updatedThisMonth(state.education), href: '/admin/education', icon: Users, accent: 'bg-[#f7f5fc] text-[#7A5BB5]', bar: '#8B74C9' },
+      { label: 'Chemotherapy', value: state.chemotherapy.filter((item) => item.status === 'published' && within(item.lastUpdated)).length, delta: updatedThisMonth(state.chemotherapy), href: '/admin/chemotherapy', icon: Ribbon, accent: 'bg-[#fff5f0] text-[#d97757]', bar: '#D97757' },
+      { label: 'Counseling Materials', value: state.education.filter((item) => item.status === 'published' && within(item.lastUpdated)).length, delta: updatedThisMonth(state.education), href: '/admin/education', icon: Users, accent: 'bg-[#f7f5fc] text-[#7A5BB5]', bar: '#8B74C9' },
     ],
     [state, range],
   );
@@ -60,9 +65,15 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <p className="text-sm text-muted">Statistics are calculated from demonstration records in this browser, including drafts in the total.</p>
+      <p className="text-sm text-muted">
+        Published counts reflect public content. Totals include drafts and pending review. Pending reviews:{' '}
+        {[...state.drugs, ...state.protocols, ...state.guidelines, ...state.education, ...state.chemotherapy].filter(
+          (item) => item.status === 'pending-review',
+        ).length}
+        .
+      </p>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         {stats.map((stat) => (
           <Link key={stat.label} to={stat.href} className={cnCard(stat.accent)}>
             <span className="flex items-center justify-between">
@@ -73,7 +84,9 @@ export function DashboardPage() {
             </span>
             <p className="mt-4 text-sm text-muted">{stat.label}</p>
             <p className="font-serif text-4xl text-navy">{stat.value}</p>
-            <p className="text-xs text-emerald-700">+{stat.delta} this month</p>
+            <p className={`text-xs ${stat.delta > 0 ? 'text-emerald-700' : 'text-muted'}`}>
+              {stat.delta > 0 ? `+${stat.delta} published this month` : 'No new publications this month'}
+            </p>
           </Link>
         ))}
       </div>
@@ -102,7 +115,7 @@ export function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="font-serif text-2xl text-navy">Recent Activity</h2>
-              <p className="text-sm text-muted">Latest changes made to the formulary library.</p>
+              <p className="text-sm text-muted">Latest changes made to the Hail Health Cluster Formulary.</p>
             </div>
             <Link to="/admin/activity" className="text-sm font-medium text-primary hover:underline">
               View all activity →
@@ -149,7 +162,7 @@ export function DashboardPage() {
             ))}
           </div>
           <p className="mt-4 text-xs text-muted">
-            Published now: {publishedCount(state.drugs)} drugs, {publishedCount(state.protocols)} protocols, {publishedCount(state.guidelines)} guidelines, {publishedCount(state.education)} education records.
+            Published now: {publishedCount(state.drugs)} drugs, {publishedCount(state.protocols)} protocols, {publishedCount(state.guidelines)} guidelines, {publishedCount(state.chemotherapy)} chemotherapy, {publishedCount(state.education)} counseling materials.
           </p>
         </div>
       </section>
@@ -170,6 +183,10 @@ function sentence(entry: AuditLogEntry): string {
     deleted: 'Deleted',
     published: 'Published',
     reset: 'Reset',
+    submitted: 'Submitted',
+    approved: 'Approved',
+    rejected: 'Rejected',
+    'changes-requested': 'Requested changes on',
   };
   return `${verbs[entry.action]} ${entry.targetType.replace('-', ' ')}`;
 }
