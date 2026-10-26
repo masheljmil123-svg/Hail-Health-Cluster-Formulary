@@ -1,6 +1,6 @@
 /**
  * Prefix a root-relative public asset path with Vite's base URL.
- * Required for GitHub Pages project sites (e.g. /KSSH-Formulary-Library/).
+ * Required for GitHub Pages project sites (e.g. /Hail-Health-Cluster-Formulary/).
  */
 export function publicUrl(path: string): string {
   const base = import.meta.env.BASE_URL || '/';

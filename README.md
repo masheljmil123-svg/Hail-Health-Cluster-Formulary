@@ -2,7 +2,7 @@
 
 Static website for the **Hail Health Cluster Formulary** at **King Salman Specialist Hospital**, part of **Hail Health Cluster**. Visitors browse the repository-published medication and clinical resource catalog on GitHub Pages.
 
-**Live site:** https://masheljmil123-svg.github.io/KSSH-Formulary-Library/
+**Live site:** https://masheljmil123-svg.github.io/Hail-Health-Cluster-Formulary/
 
 ## Technologies
 
@@ -26,7 +26,7 @@ npm run build
 npm run preview
 ```
 
-GitHub Pages build uses base path `/KSSH-Formulary-Library/` and enables the evaluation Login / local-admin UI (`VITE_ENABLE_LOCAL_ADMIN=true` in `.github/workflows/deploy-github-pages.yml`). Test accounts are not real security.
+GitHub Pages build uses base path `/Hail-Health-Cluster-Formulary/` and enables the evaluation Login / local-admin UI (`VITE_ENABLE_LOCAL_ADMIN=true` in `.github/workflows/deploy-github-pages.yml`). Test accounts are not real security.
 
 ## Publishing content
 

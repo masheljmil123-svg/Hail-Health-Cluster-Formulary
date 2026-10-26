@@ -23,7 +23,7 @@ function spaFallbackPlugin() {
 }
 
 export default defineConfig({
-  // GitHub Actions sets VITE_BASE_PATH=/KSSH-Formulary-Library/ for project Pages.
+  // GitHub Actions sets VITE_BASE_PATH=/Hail-Health-Cluster-Formulary/ for project Pages.
   // Local `npm run build` / `npm run preview` default to `/`.
   base: process.env.VITE_BASE_PATH || '/',
   plugins: [react(), spaFallbackPlugin()],

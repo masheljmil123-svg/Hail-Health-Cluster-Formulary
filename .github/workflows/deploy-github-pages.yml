@@ -32,8 +32,8 @@ jobs:
 
       - name: Production build
         env:
-          # Project site under https://<user>.github.io/KSSH-Formulary-Library/
-          VITE_BASE_PATH: /KSSH-Formulary-Library/
+          # Project site under https://<user>.github.io/Hail-Health-Cluster-Formulary/
+          VITE_BASE_PATH: /Hail-Health-Cluster-Formulary/
           # Static evaluation site: include Login + local admin/team/staff demo flows.
           # Not real authentication — credentials are frontend test accounts only.
           VITE_ENABLE_LOCAL_ADMIN: 'true'
