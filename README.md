@@ -26,7 +26,7 @@ npm run build
 npm run preview
 ```
 
-GitHub Pages build uses base path `/KSSH-Formulary-Library/` (set in `.github/workflows/deploy-github-pages.yml`).
+GitHub Pages build uses base path `/KSSH-Formulary-Library/` and enables the evaluation Login / local-admin UI (`VITE_ENABLE_LOCAL_ADMIN=true` in `.github/workflows/deploy-github-pages.yml`). Test accounts are not real security.
 
 ## Publishing content
 
