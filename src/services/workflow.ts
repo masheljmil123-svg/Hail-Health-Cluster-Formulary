@@ -1,4 +1,5 @@
 import { newId } from '@/lib/format';
+import { approveAndPublishSection, hasMeaningfulWorkingContent } from '@/services/sectionPublication';
 import type {
   Drug,
   LibraryDocument,
@@ -11,22 +12,35 @@ export const WORKFLOW_LABELS: Record<PublicationStatus, string> = {
   draft: 'Draft',
   'pending-review': 'Pending Review',
   'changes-requested': 'Changes Requested',
-  rejected: 'Rejected',
-  approved: 'Approved',
+  rejected: 'Changes Requested',
+  approved: 'Published',
   published: 'Published',
   archived: 'Archived',
 };
 
+/** Day-to-day editorial statuses shown in the medication editor. */
+export const SIMPLE_EDITORIAL_STATUSES: PublicationStatus[] = [
+  'draft',
+  'pending-review',
+  'changes-requested',
+  'published',
+];
+
 export const REVIEW_QUEUE_STATUSES: PublicationStatus[] = [
   'pending-review',
   'changes-requested',
-  'approved',
   'published',
-  'rejected',
 ];
 
 export function isPubliclyVisible(status: PublicationStatus): boolean {
-  return status === 'published';
+  return status === 'published' || status === 'approved';
+}
+
+/** Map internal statuses to supervisor-friendly labels. */
+export function simpleEditorialLabel(status: PublicationStatus): string {
+  if (status === 'approved' || status === 'published') return 'Published';
+  if (status === 'rejected') return 'Changes Requested';
+  return WORKFLOW_LABELS[status] ?? status;
 }
 
 export function canAuthorEdit(status: PublicationStatus, role: string): boolean {
@@ -73,11 +87,18 @@ export function applyWorkflowTransition<T extends { status: PublicationStatus; r
       to = 'approved';
       break;
     case 'publish':
-      if (from !== 'approved' && from !== 'published') throw new Error('Publish requires an approved item.');
-      to = 'published';
-      break;
     case 'approve-publish':
-      if (from !== 'pending-review' && from !== 'approved') throw new Error('Approve & Publish requires a pending or approved item.');
+      // Local-first Publish: mark published in this browser workspace for immediate local preview.
+      // Online GitHub Pages still requires a separate export/import/deploy step.
+      if (
+        from !== 'pending-review' &&
+        from !== 'approved' &&
+        from !== 'draft' &&
+        from !== 'published' &&
+        from !== 'changes-requested'
+      ) {
+        throw new Error('Publish requires a draft, pending review, or already published item.');
+      }
       to = 'published';
       break;
     default:
@@ -103,7 +124,8 @@ export function applyWorkflowTransition<T extends { status: PublicationStatus; r
 
 /** When editing a published drug, keep public snapshot and move working copy to draft. */
 export function beginDrugRevision(drug: Drug, actor: { id: string; label: string }): Drug {
-  if (drug.status !== 'published') return drug;
+  if (drug.status !== 'published' && drug.status !== 'approved') return drug;
+  const fromStatus = drug.status;
   const snapshot = drug.publishedSnapshot ?? {
     genericName: drug.genericName,
     brandNames: [...drug.brandNames],
@@ -112,6 +134,9 @@ export function beginDrugRevision(drug: Drug, actor: { id: string; label: string
     alertClassification: drug.publishedAlertClassification,
     publishedAt: new Date().toISOString(),
     version: drug.version,
+    references: structuredClone(
+      (drug.references ?? []).filter((ref) => ref.visibility === 'public' && ref.approvalStatus === 'approved'),
+    ),
   };
   return {
     ...drug,
@@ -121,9 +146,9 @@ export function beginDrugRevision(drug: Drug, actor: { id: string; label: string
       action: 'submit',
       actorId: actor.id,
       actorLabel: actor.label,
-      note: 'Revision draft created from published version. Previous approved content remains public until the revision is published.',
+      note: 'Revision draft created. Previous approved content remains available for export until this revision is prepared again.',
       timestamp: new Date().toISOString(),
-      fromStatus: 'published',
+      fromStatus,
       toStatus: 'draft',
     }),
   };
@@ -158,19 +183,43 @@ export function beginDocumentRevision(
   };
 }
 
+/**
+ * Local Publish: approve eligible completed sections and mark the medication Published
+ * in this browser workspace so hospital views can preview it immediately.
+ * Does NOT deploy to GitHub Pages for other visitors.
+ */
 export function finalizeDrugPublish(drug: Drug): Drug {
+  return finalizeDrugReadyForDeployment(drug);
+}
+
+export function finalizeDrugReadyForDeployment(drug: Drug): Drug {
+  const monographSections = (drug.monographSections ?? []).map((section) => {
+    if (section.status === 'published' && section.publishedContent) return section;
+    if (!hasMeaningfulWorkingContent(section, drug, [])) return section;
+    return approveAndPublishSection(section, drug, []);
+  });
+
+  // Publishing the medication never changes Private references or auto-approves pending Public ones.
+  const publicApprovedReferences = (drug.references ?? []).filter(
+    (ref) => ref.visibility === 'public' && ref.approvalStatus === 'approved',
+  );
+
   return {
     ...drug,
     status: 'published',
+    monographSections,
+    // Keep full references[] (including Private) in the workspace drug record.
+    references: drug.references ?? [],
     publishedAlertClassification: drug.alertClassification,
     publishedSnapshot: {
       genericName: drug.genericName,
       brandNames: [...drug.brandNames],
       indicationsSummary: drug.indicationsSummary,
-      monographSections: structuredClone(drug.monographSections),
+      monographSections: structuredClone(monographSections),
       alertClassification: drug.alertClassification,
       publishedAt: new Date().toISOString(),
       version: drug.version,
+      references: structuredClone(publicApprovedReferences),
     },
   };
 }

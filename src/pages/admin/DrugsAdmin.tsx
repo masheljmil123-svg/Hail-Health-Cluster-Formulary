@@ -1,9 +1,12 @@
 import { FormEvent, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ResourceTable } from '@/components/admin/ResourceTable';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { ApprovePrepareDialog } from '@/components/admin/ApprovePrepareDialog';
+import { DrugReferencesEditor } from '@/components/admin/DrugReferencesEditor';
+import { Modal } from '@/components/ui/Modal';
 import { RichTextEditor } from '@/components/editor/RichTextEditor';
 import { DrugImageCarousel } from '@/components/drugs/DrugImageCarousel';
 import { MedicationAlertBadge } from '@/components/ui/MedicationAlertBadge';
+import { PublicationBadge } from '@/components/ui/StatusBadge';
 import {
   createDefaultMonographSections,
   DOSE_UNIT_VOCABULARY,
@@ -16,6 +19,8 @@ import { formularyStatusLabel } from '@/config/site';
 import { useAuth } from '@/hooks/useAuth';
 import { useContent } from '@/hooks/useContent';
 import { newId, todayISO } from '@/lib/format';
+import { ensureHospitalAssignments, sortedHospitals } from '@/services/hospitals';
+import { DrugManagementBrowser } from '@/pages/admin/DrugManagementBrowser';
 import { putMediaFromFile, validateImageFile } from '@/services/mediaStore';
 import {
   applySectionEdit,
@@ -26,6 +31,10 @@ import {
   submitSectionForApproval,
   unpublishSection,
 } from '@/services/sectionPublication';
+import {
+  buildDrugSubmissionPackage,
+  downloadDrugSubmissionPackage,
+} from '@/services/submissionPackage';
 import { beginDrugRevision, canSubmit } from '@/services/workflow';
 import type {
   DosingEntry,
@@ -33,6 +42,7 @@ import type {
   DrugFormulation,
   DrugImageRef,
   FormularyStatus,
+  HospitalDrugAssignment,
   LibraryDocument,
   MedicationAlertClassification,
   MonographSection,
@@ -42,13 +52,16 @@ import type {
 } from '@/types';
 
 export function DrugsAdmin() {
-  const { state, setStatus, deleteItem } = useContent();
+  const { state, setStatus, deleteItem, saveDrug } = useContent();
   const { allowed } = useAuth();
   const canEdit = allowed('content:update') || allowed('content:create');
+  const hospitals = sortedHospitals(state.hospitals);
+  const previewHospital = hospitals[0]?.slug ?? 'king-salman';
+
   return (
     <AdminCollection
       title="Manage Drugs"
-      text="Create and edit medication monographs. Team members submit drafts for administrator review. Only approved and published medications appear on the public site."
+      text="Add medications, complete monograph sections, choose hospitals, then Save Draft or Publish. Team submissions appear under Review Requests."
       action={canEdit ? { to: '/admin/drugs/new', label: 'Add New Drug' } : undefined}
     >
       {state.drugs.length === 0 ? (
@@ -62,21 +75,16 @@ export function DrugsAdmin() {
           )}
         </div>
       ) : (
-        <ResourceTable
-          noun="drugs"
+        <DrugManagementBrowser
+          drugs={state.drugs}
+          classes={state.therapeuticClasses ?? []}
+          hospitals={hospitals}
           canEdit={canEdit}
-          rows={state.drugs.map((drug) => ({
-            id: drug.id,
-            title: drug.genericName,
-            subtitle: `${drug.therapeuticClass}${drug.brandNames[0] ? ` · ${drug.brandNames.join(', ')}` : ''}`,
-            status: drug.status,
-            updated: drug.lastUpdated,
-            editTo: `/admin/drugs/${drug.id}`,
-            previewTo: `/drugs/${drug.id}?preview=1`,
-          }))}
+          previewHospital={previewHospital}
           onArchive={(id) => setStatus('drug', id, 'archived')}
           onRestore={(id) => setStatus('drug', id, 'draft')}
           onDelete={(id) => deleteItem('drug', id)}
+          onSaveAssignments={(drug) => saveDrug(drug, false)}
         />
       )}
     </AdminCollection>
@@ -91,22 +99,39 @@ export function DrugEditor() {
 function DrugEditorForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const { state, saveDrug, applyReview } = useContent();
   const { session, allowed } = useAuth();
   const isAdmin = allowed('content:publish');
+  const reviewMode = params.get('review') === '1' || params.get('mode') === 'review';
   const existing = state.drugs.find((drug) => drug.id === id);
+  const hospitals = sortedHospitals(state.hospitals);
   const [drug, setDrug] = useState<Drug>(() => {
-    if (!existing) return emptyDrug(session);
-    if (existing.status === 'published' && session && !allowed('content:publish')) {
-      return beginDrugRevision(existing, { id: session.userId, label: session.displayName });
+    if (!existing) return emptyDrug(session, state.hospitals);
+    const withAssignments = {
+      ...existing,
+      references: existing.references ?? [],
+      hospitalAssignments: ensureHospitalAssignments(existing, state.hospitals),
+    };
+    if (
+      (existing.status === 'published' || existing.status === 'approved') &&
+      session &&
+      !allowed('content:publish')
+    ) {
+      return beginDrugRevision(withAssignments, { id: session.userId, label: session.displayName });
     }
-    return existing;
+    return withAssignments;
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState(false);
   const [savedNote, setSavedNote] = useState('');
   const [imageError, setImageError] = useState('');
   const [preview, setPreview] = useState(false);
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [changesOpen, setChangesOpen] = useState(false);
+  const [reviewFeedback, setReviewFeedback] = useState(drug.reviewNote ?? '');
+  const isReviewingSubmission =
+    isAdmin && (reviewMode || drug.status === 'pending-review' || drug.status === 'changes-requested');
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -141,10 +166,6 @@ function DrugEditorForm() {
       next.therapeuticClass = 'Select at least one therapeutic class.';
     }
     if (!drug.version.trim()) next.version = 'Enter a document version.';
-    if (status === 'published' && isAdmin) {
-      const gate = canPublishDrug(drug, relatedDocs);
-      if (!gate.ok) next.publish = gate.reason ?? 'Cannot publish this drug yet.';
-    }
     setErrors(next);
     if (Object.keys(next).length) return null;
     const primaryName =
@@ -175,36 +196,63 @@ function DrugEditorForm() {
   function onSubmit(event: FormEvent, status?: PublicationStatus) {
     event.preventDefault();
     const targetStatus = status ?? 'draft';
-    const payload = buildPayload(targetStatus === 'published' && !isAdmin ? 'draft' : targetStatus);
-    if (!payload) return;
     if (isAdmin && targetStatus === 'published') {
-      const staged = {
-        ...payload,
-        status: (payload.status === 'approved' ? 'approved' : 'pending-review') as PublicationStatus,
-      };
-      const result = applyReview(
-        'drug',
-        payload.id,
-        staged.status === 'approved' ? 'publish' : 'approve-publish',
-        { id: session!.userId, label: session!.displayName, role: session!.role },
-        undefined,
-        staged,
-      );
-      if (!result.ok) {
-        setSavedNote(result.error);
-        return;
-      }
-    } else {
-      saveDrug(payload, !existing);
+      setApproveOpen(true);
+      return;
+    }
+    // Preserve review queue status when saving progress during review.
+    const draftStatus: PublicationStatus =
+      drug.status === 'pending-review' || drug.status === 'changes-requested' ? drug.status : 'draft';
+    const payload = buildPayload(draftStatus);
+    if (!payload) return;
+    saveDrug(payload, !existing);
+    setDirty(false);
+    setSavedNote('Draft saved.');
+    if (!isReviewingSubmission) {
+      navigate(isAdmin ? '/admin/drugs' : '/workspace');
+    }
+  }
+
+  function confirmPublish() {
+    if (!session || !isAdmin) return;
+    const payload = buildPayload('draft');
+    if (!payload) return;
+    const gate = canPublishDrug(payload, relatedDocs);
+    if (!gate.ok) {
+      setErrors({ publish: gate.reason ?? 'Cannot publish this medication yet.' });
+      setApproveOpen(false);
+      return;
+    }
+    const staged: Drug = {
+      ...payload,
+      status: payload.status === 'pending-review' ? 'pending-review' : 'draft',
+      reviewerId: session.userId,
+      reviewerLabel: session.displayName,
+    };
+    const result = applyReview(
+      'drug',
+      payload.id,
+      'approve-publish',
+      { id: session.userId, label: session.displayName, role: session.role },
+      undefined,
+      staged,
+    );
+    if (!result.ok) {
+      setSavedNote(result.error);
+      setApproveOpen(false);
+      return;
     }
     setDirty(false);
-    setSavedNote(targetStatus === 'published' && isAdmin ? 'Drug published.' : 'Saved as draft.');
-    navigate(isAdmin ? '/admin/drugs' : '/workspace');
+    setApproveOpen(false);
+    setSavedNote(
+      'Published in this browser. Selected hospitals can preview it locally. Online website visitors still need a deployment from Settings.',
+    );
+    navigate(isReviewingSubmission ? '/admin/review-requests' : '/admin/drugs');
   }
 
   function submitForReview(event: FormEvent) {
     event.preventDefault();
-    if (!session) return;
+    if (!session || isAdmin) return;
     const payload = buildPayload('draft');
     if (!payload) return;
     const result = applyReview(
@@ -220,8 +268,35 @@ function DrugEditorForm() {
       return;
     }
     setDirty(false);
-    setSavedNote('Submitted for administrator review.');
+    setSavedNote('Submitted for administrator review. This is not published.');
     navigate('/workspace');
+  }
+
+  function requestChanges() {
+    if (!session || !isAdmin) return;
+    if (!reviewFeedback.trim()) {
+      setSavedNote('Add written feedback before requesting changes.');
+      setChangesOpen(true);
+      return;
+    }
+    const payload = buildPayload('draft');
+    if (!payload) return;
+    const result = applyReview(
+      'drug',
+      payload.id,
+      'request-changes',
+      { id: session.userId, label: session.displayName, role: session.role },
+      reviewFeedback,
+      payload,
+    );
+    if (!result.ok) {
+      setSavedNote(result.error);
+      return;
+    }
+    setDirty(false);
+    setChangesOpen(false);
+    setSavedNote('Changes requested. The team member can revise and resubmit.');
+    navigate('/admin/review-requests');
   }
 
   async function onImagesSelected(files: FileList | null) {
@@ -319,12 +394,24 @@ function DrugEditorForm() {
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <Link to="/admin/drugs" className="text-sm font-medium text-primary hover:underline">
-            Back to drugs
+          <Link
+            to={isReviewingSubmission ? '/admin/review-requests' : '/admin/drugs'}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            {isReviewingSubmission ? 'Back to review requests' : 'Back to drugs'}
           </Link>
-          <h1 className="mt-2 font-serif text-4xl text-navy">{existing ? 'Edit drug monograph' : 'Add drug'}</h1>
+          <h1 className="mt-2 font-serif text-4xl text-navy">
+            {isReviewingSubmission ? 'Review medication' : existing ? 'Edit medication' : 'Add medication'}
+          </h1>
           <p className="mt-2 text-sm text-muted">
-            Demo storage keeps images in this browser (IndexedDB). Clearing site data removes uploaded files.
+            {isReviewingSubmission
+              ? `Submitted by ${drug.authorLabel || 'Unknown contributor'}. Edit any fields, then save draft, request changes, or approve & publish.`
+              : 'Complete the monograph, assign hospitals, then save a draft or publish.'}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Status: <PublicationBadge status={drug.status === 'approved' ? 'published' : drug.status} />
+            {drug.authorLabel ? ` · Author: ${drug.authorLabel}` : ''}
+            {drug.reviewerLabel ? ` · Reviewed by: ${drug.reviewerLabel}` : ''}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -332,21 +419,79 @@ function DrugEditorForm() {
             Preview
           </button>
           <button type="submit" className="btn-secondary" onClick={(event) => onSubmit(event, 'draft')}>
-            Save draft
+            Save Draft
           </button>
-          {canSubmit(drug.status) && (
-            <button type="button" className="btn-secondary" onClick={submitForReview}>
+          {!isAdmin && canSubmit(drug.status) && (
+            <button type="button" className="btn-primary" onClick={submitForReview}>
               Submit for Review
             </button>
           )}
+          {!isAdmin && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => downloadDrugSubmissionPackage(buildDrugSubmissionPackage(drug))}
+            >
+              Export submission file
+            </button>
+          )}
+          {isReviewingSubmission && (
+            <button type="button" className="btn-secondary" onClick={() => setChangesOpen(true)}>
+              Request Changes
+            </button>
+          )}
           {isAdmin && (
-            <button type="submit" className="btn-primary" onClick={(event) => onSubmit(event, 'published')}>
-              Approve & Publish
+            <button type="button" className="btn-primary" onClick={(event) => onSubmit(event, 'published')}>
+              {isReviewingSubmission ? 'Approve & Publish' : 'Publish'}
             </button>
           )}
         </div>
       </div>
       {savedNote && <p className="text-sm text-emerald-700">{savedNote}</p>}
+      {errors.publish && <p className="text-sm text-rose-700">{errors.publish}</p>}
+      <ApprovePrepareDialog
+        open={approveOpen}
+        drug={drug}
+        hospitals={hospitals}
+        relatedDocs={relatedDocs}
+        title={isReviewingSubmission ? 'Approve & Publish' : 'Publish Medication'}
+        confirmLabel={isReviewingSubmission ? 'Approve & Publish' : 'Confirm Publish'}
+        issues={[
+          ...(!drug.genericName.trim() ? ['Enter the generic name.'] : []),
+          ...(!(drug.therapeuticClassIds?.length || drug.therapeuticClass.trim())
+            ? ['Select at least one therapeutic class.']
+            : []),
+          ...(!drug.version.trim() ? ['Enter a document version.'] : []),
+          ...(canPublishDrug(drug, relatedDocs).ok ? [] : [canPublishDrug(drug, relatedDocs).reason ?? 'Not ready.']),
+        ]}
+        onClose={() => setApproveOpen(false)}
+        onChangeHospitals={(hospitalAssignments) => patch({ hospitalAssignments })}
+        onConfirm={confirmPublish}
+      />
+      <Modal open={changesOpen} onClose={() => setChangesOpen(false)} title="Request changes">
+        <div className="space-y-4 text-sm">
+          <p className="text-muted">
+            Return this submission to the team member with clear feedback. It will not be published.
+          </p>
+          <label className="block">
+            <span className="ui-label">Feedback for the team member</span>
+            <textarea
+              className="ui-input min-h-28"
+              value={reviewFeedback}
+              onChange={(event) => setReviewFeedback(event.target.value)}
+              placeholder="Describe what needs to change…"
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <button type="button" className="btn-secondary" onClick={() => setChangesOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className="btn-primary" onClick={requestChanges}>
+              Request Changes
+            </button>
+          </div>
+        </div>
+      </Modal>
       {drug.status === 'changes-requested' && drug.reviewNote && (
         <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           Administrator feedback: {drug.reviewNote}
@@ -429,25 +574,67 @@ function DrugEditorForm() {
               ))}
             </select>
           </Field>
-          <Field label="Workflow status">
-            {isAdmin ? (
-              <select className="ui-input" value={drug.status} onChange={(event) => patch({ status: event.target.value as PublicationStatus })}>
-                <option value="draft">Draft</option>
-                <option value="pending-review">Pending Review</option>
-                <option value="changes-requested">Changes Requested</option>
-                <option value="rejected">Rejected</option>
-                <option value="approved">Approved</option>
-                <option value="published">Published</option>
-                <option value="archived">Archived</option>
-              </select>
-            ) : (
-              <input className="ui-input" value={drug.status} readOnly />
-            )}
+          <Field label="Editorial status" hint="Changed by Save Draft, Submit for Review, Request Changes, or Publish.">
+            <div className="ui-input flex items-center bg-canvas">
+              <PublicationBadge
+                status={
+                  drug.status === 'approved' || drug.status === 'rejected'
+                    ? drug.status === 'approved'
+                      ? 'published'
+                      : 'changes-requested'
+                    : drug.status
+                }
+              />
+            </div>
           </Field>
           <Field label="Version" error={errors.version}>
             <input className="ui-input" value={drug.version} onChange={(event) => patch({ version: event.target.value })} />
           </Field>
         </div>
+      </section>
+
+      <section className="panel space-y-4 p-6">
+        <h2 className="font-serif text-2xl text-navy">Hospital Formulary Availability</h2>
+        <p className="text-sm leading-6 text-muted">
+          Toggle which hospitals include this medication in their public formulary catalog. ON means assigned to that
+          hospital&apos;s formulary view — not a claim about live pharmacy stock. New medications default to all
+          hospitals OFF.
+        </p>
+        <ul className="divide-y divide-line/70 rounded-2xl border border-line/70">
+          {hospitals.map((hospital) => {
+            const assignment =
+              (drug.hospitalAssignments ?? []).find((row) => row.hospitalId === hospital.id) ??
+              ({ hospitalId: hospital.id, enabled: false } satisfies HospitalDrugAssignment);
+            return (
+              <li key={hospital.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-navy">{hospital.nameEn}</p>
+                  <p className="text-xs text-muted">{hospital.slug}</p>
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-ink">
+                  <span className={assignment.enabled ? 'font-semibold text-emerald-800' : 'text-muted'}>
+                    {assignment.enabled ? 'ON' : 'OFF'}
+                  </span>
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-line text-navy focus:ring-navy"
+                    checked={assignment.enabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      const rows = ensureHospitalAssignments(drug, hospitals).map((row) =>
+                        row.hospitalId === hospital.id ? { ...row, enabled } : row,
+                      );
+                      patch({ hospitalAssignments: rows });
+                    }}
+                  />
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+        {hospitals.length === 0 && (
+          <p className="text-sm text-muted">No hospitals configured. Add hospitals under Hospital Management first.</p>
+        )}
       </section>
 
       <section className="panel space-y-4 p-6">
@@ -679,17 +866,23 @@ function DrugEditorForm() {
         </div>
       </section>
 
+      <DrugReferencesEditor
+        drug={drug}
+        isAdmin={isAdmin}
+        session={session}
+        onChange={(references) => patch({ references })}
+      />
+
       <section className="panel space-y-4 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-serif text-2xl text-navy">Monograph checklist</h2>
             <p className="mt-1 text-sm text-muted">
-              All checklist sections stay visible here. Public pages show a section only after{' '}
-              <span className="font-semibold">Approve &amp; Publish</span>. Entering text alone does not publish.
-              Demo permissions simulate administrator approval — not production hospital authorization.
+              Complete relevant sections here. Empty sections stay hidden from hospital views. Publishing approves all
+              completed sections together — you do not need to approve each section separately.
             </p>
             <p className="mt-1 text-sm text-navy">
-              Approved public sections: <span className="font-semibold">{publishedSectionCount}</span>
+              Sections ready for visitors after publish: <span className="font-semibold">{publishedSectionCount}</span>
             </p>
           </div>
           <button
@@ -729,6 +922,7 @@ function DrugEditorForm() {
                 section={section}
                 drug={drug}
                 relatedDocs={relatedDocs}
+                isAdmin={isAdmin}
                 onChange={updateSection}
                 onPublishSafety={() =>
                   patch({
@@ -758,10 +952,20 @@ function DrugEditorForm() {
       </section>
 
       <div className="flex flex-wrap gap-3 pb-10">
-        <button type="submit" className="btn-primary" onClick={(event) => onSubmit(event, drug.status)}>
-          Save drug
+        <button type="submit" className="btn-secondary" onClick={(event) => onSubmit(event, 'draft')}>
+          Save Draft
         </button>
-        <Link to="/admin/drugs" className="btn-secondary">
+        {!isAdmin && canSubmit(drug.status) && (
+          <button type="button" className="btn-primary" onClick={submitForReview}>
+            Submit for Review
+          </button>
+        )}
+        {isAdmin && (
+          <button type="button" className="btn-primary" onClick={(event) => onSubmit(event, 'published')}>
+            {isReviewingSubmission ? 'Approve & Publish' : 'Publish'}
+          </button>
+        )}
+        <Link to={isReviewingSubmission ? '/admin/review-requests' : '/admin/drugs'} className="btn-secondary">
           Cancel
         </Link>
       </div>
@@ -917,6 +1121,7 @@ function SectionEditor({
   section,
   drug,
   relatedDocs,
+  isAdmin,
   onChange,
   onPublishSafety,
   onUnpublishSafety,
@@ -926,6 +1131,7 @@ function SectionEditor({
   section: MonographSection;
   drug: Drug;
   relatedDocs: LibraryDocument[];
+  isAdmin: boolean;
   onChange: (next: MonographSection) => void;
   onPublishSafety?: () => void;
   onUnpublishSafety?: () => void;
@@ -979,40 +1185,51 @@ function SectionEditor({
         </span>
       </summary>
       <div className="mt-4 space-y-3">
-        <div className="flex flex-wrap gap-2" onClick={(event) => event.preventDefault()}>
-          <button
-            type="button"
-            className="btn-secondary py-1.5 text-xs"
-            onClick={() => onChange(submitSectionForApproval(section, drug, relatedDocs))}
-          >
-            Submit for approval
-          </button>
-          <button
-            type="button"
-            className="btn-primary py-1.5 text-xs"
-            onClick={() => {
-              onChange(approveAndPublishSection(section, drug, relatedDocs));
-              if (section.key === 'medication-safety') onPublishSafety?.();
-            }}
-          >
-            Approve &amp; Publish
-          </button>
-          <button
-            type="button"
-            className="btn-secondary py-1.5 text-xs"
-            onClick={() => {
-              onChange(unpublishSection(section, drug, relatedDocs));
-              if (section.key === 'medication-safety') onUnpublishSafety?.();
-            }}
-            disabled={!section.publishedContent && section.status !== 'published'}
-          >
-            Unpublish
-          </button>
-        </div>
+        {isAdmin ? (
+          <p className="rounded-xl bg-clinical px-3 py-2 text-xs leading-5 text-navy">
+            Content here is included automatically when you use <span className="font-semibold">Publish</span> or{' '}
+            <span className="font-semibold">Approve &amp; Publish</span> at the top of the page. Empty sections stay hidden.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-2" onClick={(event) => event.preventDefault()}>
+            <button
+              type="button"
+              className="btn-secondary py-1.5 text-xs"
+              onClick={() => onChange(submitSectionForApproval(section, drug, relatedDocs))}
+            >
+              Mark section ready
+            </button>
+          </div>
+        )}
+        {isAdmin && (
+          <div className="flex flex-wrap gap-2" onClick={(event) => event.preventDefault()}>
+            <button
+              type="button"
+              className="btn-secondary py-1.5 text-xs"
+              onClick={() => {
+                onChange(approveAndPublishSection(section, drug, relatedDocs));
+                if (section.key === 'medication-safety') onPublishSafety?.();
+              }}
+            >
+              Include section now
+            </button>
+            <button
+              type="button"
+              className="btn-secondary py-1.5 text-xs"
+              onClick={() => {
+                onChange(unpublishSection(section, drug, relatedDocs));
+                if (section.key === 'medication-safety') onUnpublishSafety?.();
+              }}
+              disabled={!section.publishedContent && section.status !== 'published'}
+            >
+              Hide published section
+            </button>
+          </div>
+        )}
         {section.publishedContent && section.status !== 'published' && (
           <p className="rounded-xl bg-clinical px-3 py-2 text-xs leading-5 text-navy">
-            A published version remains visible on the public monograph until you Approve &amp; Publish this revision.
-            Published at {section.publishedContent.publishedAt}.
+            A published version remains visible until you publish this revision. Published at{' '}
+            {section.publishedContent.publishedAt}.
           </p>
         )}
         {section.key === 'custom' && (
@@ -1116,7 +1333,10 @@ function moveImage(drug: Drug, id: string, direction: -1 | 1, patch: (next: Part
   patch({ images: copy.map((item, itemIndex) => ({ ...item, displayOrder: itemIndex + 1 })) });
 }
 
-function emptyDrug(session: { userId: string; displayName: string } | null): Drug {
+function emptyDrug(
+  session: { userId: string; displayName: string } | null,
+  hospitals: { id: string }[] = [],
+): Drug {
   return {
     id: newId('drug'),
     genericName: '',
@@ -1137,6 +1357,8 @@ function emptyDrug(session: { userId: string; displayName: string } | null): Dru
     images: [],
     monographSections: createDefaultMonographSections(),
     relatedResourceIds: [],
+    references: [],
+    hospitalAssignments: hospitals.map((hospital) => ({ hospitalId: hospital.id, enabled: false })),
     feeApplicable: null,
     lastUpdated: todayISO(),
     lastReviewedAt: todayISO(),

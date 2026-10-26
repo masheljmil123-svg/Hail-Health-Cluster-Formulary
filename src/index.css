@@ -35,11 +35,94 @@ body {
   color: #0b2a50;
 }
 
-.hero-photo {
+/* —— Hospital homepage hero: ONE pre-composited photographic background —— */
+
+.hero-visual__base {
+  background: #eaf4fb;
+}
+
+.hero-composed-photo {
   object-fit: cover;
-  object-position: 18% center;
-  -webkit-mask-image: linear-gradient(90deg, #000 0%, #000 42%, rgba(0, 0, 0, 0.72) 64%, transparent 92%);
-  mask-image: linear-gradient(90deg, #000 0%, #000 42%, rgba(0, 0, 0, 0.72) 64%, transparent 92%);
+  object-position: var(--hero-pos-desktop, center center);
+  z-index: 1;
+}
+
+/* Mobile: bias toward the hospital side of the panoramic */
+@media (max-width: 767px) {
+  .hero-composed-photo {
+    object-position: var(--hero-pos-mobile, 18% center);
+  }
+}
+
+/*
+ * Soft full-bleed assist only at the very center — photos stay visible on the sides.
+ * Primary readability comes from the copy scrim + wider center in the WebP.
+ */
+.hero-visual__readability {
+  z-index: 2;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 46% 72% at 50% 38%,
+    rgba(242, 248, 252, 0.55) 0%,
+    rgba(234, 244, 251, 0.28) 48%,
+    transparent 72%
+  );
+}
+
+@media (max-width: 767px) {
+  .hero-visual__readability {
+    background: radial-gradient(
+      ellipse 78% 70% at 50% 36%,
+      rgba(242, 248, 252, 0.82) 0%,
+      rgba(234, 244, 251, 0.55) 55%,
+      transparent 80%
+    );
+  }
+}
+
+/* Localized scrim behind title / hospital name / subtitle only */
+.hero-copy {
+  padding: 0.85rem 1rem 1rem;
+}
+
+.hero-copy__scrim {
+  position: absolute;
+  inset: -0.35rem -1.25rem -0.5rem;
+  z-index: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 72% 78% at 50% 42%,
+    rgba(242, 248, 252, 0.96) 0%,
+    rgba(234, 244, 251, 0.88) 42%,
+    rgba(234, 244, 251, 0.35) 72%,
+    transparent 88%
+  );
+}
+
+@media (min-width: 768px) {
+  .hero-copy {
+    padding: 1rem 1.5rem 1.15rem;
+  }
+
+  .hero-copy__scrim {
+    inset: -0.5rem -2.5rem -0.65rem;
+  }
+}
+
+.hero-copy__title {
+  color: #123454;
+  font-size: clamp(1.55rem, 1.2rem + 1.6vw, 2.65rem);
+}
+
+.hero-copy__hospital {
+  color: #15588d;
+  font-size: clamp(1.05rem, 0.9rem + 0.7vw, 1.5rem);
+}
+
+.hero-copy__subtitle {
+  color: #16324f;
+  font-size: clamp(0.9rem, 0.85rem + 0.25vw, 0.98rem);
+  max-width: 36rem;
 }
 
 .login-photo {
@@ -319,6 +402,258 @@ body {
   padding: 0.35rem 0.5rem;
 }
 
+/* —— Welcome / hospital selection portal —— */
+.welcome-page {
+  overflow-x: clip;
+}
+
+.welcome-shell {
+  width: 100%;
+  max-width: 100%;
+  padding: 1rem 0 2rem;
+}
+
+@media (min-width: 640px) {
+  .welcome-shell {
+    padding: 1.35rem 0 2.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .welcome-shell {
+    padding: 1.5rem 0 3rem;
+  }
+}
+
+@media (min-width: 1440px) {
+  .welcome-shell {
+    max-width: min(1680px, 100%);
+  }
+}
+
+.welcome-header,
+.welcome-content {
+  padding-inline: clamp(0.85rem, 2.2vw, 2rem);
+}
+
+.welcome-content {
+  max-width: none;
+  width: 100%;
+  padding-top: clamp(1.25rem, 3vw, 3.25rem);
+  padding-bottom: 0.25rem;
+}
+
+.welcome-hero-photo {
+  object-fit: cover;
+  object-position: 18% center;
+  filter: saturate(0.92) contrast(1.02);
+}
+
+.welcome-hero-overlay {
+  background: linear-gradient(
+    115deg,
+    rgba(7, 28, 58, 0.9) 0%,
+    rgba(12, 55, 92, 0.74) 42%,
+    rgba(16, 96, 110, 0.58) 72%,
+    rgba(232, 244, 251, 0.78) 100%
+  );
+}
+
+@media (max-width: 639px) {
+  .welcome-hero-photo {
+    object-position: 28% 35%;
+  }
+
+  .welcome-hero-overlay {
+    background: linear-gradient(
+      165deg,
+      rgba(7, 28, 58, 0.94) 0%,
+      rgba(12, 55, 92, 0.86) 45%,
+      rgba(16, 96, 110, 0.72) 78%,
+      rgba(7, 28, 58, 0.88) 100%
+    );
+  }
+}
+
+.welcome-rx-pattern {
+  background-image:
+    radial-gradient(circle at 12% 80%, rgba(255, 255, 255, 0.16) 0 1px, transparent 2px),
+    radial-gradient(circle at 78% 30%, rgba(255, 255, 255, 0.12) 0 1.5px, transparent 3px),
+    linear-gradient(135deg, transparent 40%, rgba(255, 255, 255, 0.05) 40.5%, transparent 41%);
+  background-size: 48px 48px, 64px 64px, 120px 120px;
+}
+
+.welcome-platform-title {
+  font-size: clamp(0.8rem, 1.1vw, 1rem);
+  line-height: 1.3;
+}
+
+.welcome-eyebrow {
+  font-size: clamp(0.7rem, 1.2vw, 0.875rem);
+}
+
+.welcome-title {
+  font-size: clamp(1.625rem, 2.8vw + 0.75rem, 3.25rem);
+  max-width: 18ch;
+  margin-inline: auto;
+  text-wrap: balance;
+}
+
+.welcome-subtitle {
+  font-size: clamp(0.95rem, 0.4vw + 0.85rem, 1.125rem);
+}
+
+.welcome-select-heading {
+  font-size: clamp(1.375rem, 1.2vw + 1rem, 2rem);
+}
+
+.welcome-hospital-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+}
+
+@media (min-width: 600px) {
+  .welcome-hospital-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.125rem;
+  }
+
+  /* Center a lone final card on tablet when odd count */
+  .welcome-hospital-cell:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+    max-width: 24rem;
+    justify-self: center;
+    width: 100%;
+  }
+}
+
+@media (min-width: 1024px) {
+  /* Cancel tablet “center lone card” behavior once multi-column desktop grids start */
+  .welcome-hospital-cell:last-child:nth-child(odd) {
+    grid-column: auto;
+    max-width: none;
+    width: auto;
+    justify-self: stretch;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .welcome-hospital-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 1.25rem;
+  }
+
+  .welcome-hospital-cell {
+    grid-column: span 2;
+  }
+
+  /* 5 hospitals: row of 3, then 2 centered */
+  .welcome-hospital-cell:nth-child(4):nth-last-child(2) {
+    grid-column: 2 / span 2;
+  }
+
+  .welcome-hospital-cell:nth-child(5):last-child {
+    grid-column: 4 / span 2;
+  }
+}
+
+@media (min-width: 1440px) {
+  .welcome-hospital-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1.35rem;
+  }
+
+  .welcome-hospital-cell {
+    grid-column: auto;
+    max-width: none;
+    width: auto;
+    justify-self: stretch;
+  }
+}
+
+.welcome-card-media {
+  aspect-ratio: 16 / 9;
+  width: 100%;
+  background: #0c3a6e;
+}
+
+@media (min-width: 1440px) {
+  .welcome-card-media {
+    aspect-ratio: 5 / 3;
+  }
+}
+
+.welcome-card-photo {
+  object-fit: cover;
+}
+
+.welcome-card-title {
+  font-size: clamp(1rem, 0.35vw + 0.92rem, 1.25rem);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+}
+
+.welcome-card-ar {
+  font-size: clamp(0.8rem, 0.2vw + 0.75rem, 0.9rem);
+  line-height: 1.45;
+}
+
+.welcome-card-cta {
+  font-size: 0.9rem;
+}
+
+@media (hover: none) {
+  .welcome-card:hover {
+    transform: none;
+  }
+
+  .welcome-card:active {
+    transform: translateY(-1px);
+  }
+}
+
+.welcome-page--animate .welcome-anim {
+  opacity: 0;
+  transform: translateY(14px);
+  animation: welcome-rise 0.7s ease forwards;
+}
+
+.welcome-page--animate .welcome-anim--logo {
+  animation-delay: 0.05s;
+}
+
+.welcome-page--animate .welcome-anim--brand {
+  animation-delay: 0.18s;
+}
+
+.welcome-page--animate .welcome-anim--title {
+  animation-delay: 0.32s;
+}
+
+.welcome-page--animate .welcome-anim--subtitle {
+  animation-delay: 0.46s;
+}
+
+.welcome-page--animate .welcome-anim--cards {
+  animation-delay: 0.58s;
+}
+
+.welcome-page--animate .welcome-card {
+  opacity: 0;
+  transform: translateY(18px);
+  animation: welcome-rise 0.65s ease forwards;
+}
+
+@keyframes welcome-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -330,5 +665,12 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .welcome-page--animate .welcome-anim,
+  .welcome-page--animate .welcome-card {
+    opacity: 1;
+    transform: none;
+    animation: none;
   }
 }

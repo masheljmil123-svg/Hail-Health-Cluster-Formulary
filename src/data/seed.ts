@@ -1,5 +1,7 @@
+import { cloneDefaultHospitals } from '@/config/hospitals';
 import { migrateContentCollections } from '@/services/migrateDrugs';
 import type { ContentState, HomepageSection, MediaRecord } from '@/types';
+
 
 /**
  * Structural homepage sections and branding media only.
@@ -110,8 +112,12 @@ const brandingMedia: MediaRecord[] = [
   },
 ];
 
-/** Empty content library with required structural sections and branding media only. */
-export function createEmptyState(): ContentState {
+/**
+ * Version-controlled public catalog shell for GitHub Pages.
+ * Hospitals and homepage structure only — no draft clinical medications.
+ * Import approved exports via `npm run import-catalog` to add public records.
+ */
+export function createPublishedCatalogShell(): ContentState {
   return migrateContentCollections({
     drugs: [],
     protocols: [],
@@ -119,12 +125,21 @@ export function createEmptyState(): ContentState {
     education: [],
     chemotherapy: [],
     therapeuticClasses: [],
+    hospitals: cloneDefaultHospitals(),
     sections,
     media: brandingMedia,
     audit: [],
     searchCounts: [],
     savedSearches: [],
   });
+}
+
+/**
+ * Default empty workspace / catalog shell without draft clinical content.
+ * Local admin draft medications are loaded via `localDraftWorkspace` when enabled.
+ */
+export function createEmptyState(): ContentState {
+  return createPublishedCatalogShell();
 }
 
 /** @deprecated Use createEmptyState — demo catalog seeding has been removed. */

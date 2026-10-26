@@ -7,6 +7,7 @@ import type { Permission, RoleId } from '@/types';
  */
 export const rolePermissions: Record<RoleId, readonly Permission[]> = {
   visitor: ['content:read'],
+  staff: ['content:read'],
   team_member: [
     'content:read',
     'content:create',
@@ -37,6 +38,11 @@ export const roleSummaries: Record<RoleId, { label: string; summary: string; act
   visitor: {
     label: 'Public Visitor',
     summary: 'Can search and view published medications and approved public resources.',
+    active: true,
+  },
+  staff: {
+    label: 'General Staff',
+    summary: 'Read-only access to hospital selection and published formulary content. Cannot edit or publish.',
     active: true,
   },
   team_member: {
@@ -70,7 +76,7 @@ export const permissionLabels: Record<Permission, string> = {
   'media:manage': 'Manage media library',
   'users:view': 'View team accounts',
   'users:manage': 'Invite and manage team accounts',
-  'activity:view': 'View the activity log',
+  'activity:view': 'View activity & analytics',
   'settings:manage': 'Manage system settings',
 };
 

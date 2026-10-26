@@ -1,4 +1,4 @@
-export type RoleId = 'visitor' | 'administrator' | 'team_member' | 'reviewer';
+export type RoleId = 'visitor' | 'administrator' | 'team_member' | 'staff' | 'reviewer';
 
 export type Permission =
   | 'content:read'
@@ -56,6 +56,15 @@ export interface AppNotification {
   read: boolean;
 }
 
+/** Professional title — distinct from application RoleId. */
+export type ProfessionalDesignation =
+  | 'pharmacist'
+  | 'clinical-pharmacist'
+  | 'pharmacy-specialist'
+  | 'pharmacy-consultant'
+  | 'other'
+  | 'unspecified';
+
 export interface TeamAccount {
   id: string;
   username: string;
@@ -64,8 +73,12 @@ export interface TeamAccount {
   role: Extract<RoleId, 'administrator' | 'team_member'>;
   active: boolean;
   createdAt: string;
-  /** Local-only credential digest — never used when Supabase Auth is configured. */
+  /** Local-only credential digest for the browser workspace. */
   passwordDigest?: string;
+  /** Optional professional designation — never inferred from role/username. */
+  professionalDesignation?: ProfessionalDesignation;
+  /** Optional hospital affiliation using stable Hospital.id. */
+  hospitalId?: string;
 }
 
 export type FormularyStatus = 'preferred' | 'restricted' | 'non-formulary' | 'pending';
@@ -82,6 +95,7 @@ export type ContentKind =
   | 'education'
   | 'chemotherapy'
   | 'therapeutic-class'
+  | 'hospital'
   | 'section'
   | 'media'
   | 'settings';
@@ -196,6 +210,74 @@ export interface DrugImageRef {
   isPrimary?: boolean;
 }
 
+/** Medication reference type shown in the References editor and public monograph. */
+export type DrugReferenceType = 'uploaded-file' | 'external-url' | 'citation';
+
+/** Per-reference visibility. Private never ships in public catalog/assets. */
+export type DrugReferenceVisibility = 'private' | 'public';
+
+/**
+ * Public-publication approval for a reference.
+ * Private references use `not-required` and stay in local workspace only.
+ * Team-requested Public starts as `pending` until an administrator approves.
+ */
+export type DrugReferenceApprovalStatus = 'not-required' | 'pending' | 'approved' | 'rejected';
+
+/**
+ * Structured medication reference. Each item has independent Private/Public visibility.
+ * Uploaded files live in IndexedDB (mediaId); private files must never enter public exports.
+ */
+export interface DrugReference {
+  id: string;
+  drugId: string;
+  title: string;
+  type: DrugReferenceType;
+  citation?: string;
+  url?: string;
+  /** IndexedDB media blob id for uploaded files — never a public asset path for private refs. */
+  attachmentId?: string;
+  attachmentName?: string;
+  attachmentMimeType?: string;
+  visibility: DrugReferenceVisibility;
+  approvalStatus: DrugReferenceApprovalStatus;
+  createdBy: string;
+  createdByLabel?: string;
+  createdAt: string;
+  updatedAt: string;
+  /**
+   * Set when an approved Public reference is later switched to Private.
+   * Warns that prior deployments/downloads cannot be recalled.
+   */
+  previouslyPublishedPublic?: boolean;
+}
+
+/** Cluster hospital shown on the welcome portal and used for formulary scoping. */
+export interface Hospital {
+  id: string;
+  slug: string;
+  nameEn: string;
+  nameAr: string;
+  /** Public image path under /assets or empty for abstract card treatment. */
+  imagePath: string;
+  description: string;
+  displayOrder: number;
+  enabled: boolean;
+  /** Lucide-style icon key for cards without a photograph. */
+  iconKey?: 'building' | 'baby' | 'heart-pulse' | 'brain' | 'hospital';
+}
+
+/**
+ * Assignment of a master drug to a hospital formulary catalog.
+ * enabled=true means the drug may appear for that hospital when also published —
+ * not a claim about live pharmacy stock.
+ */
+export interface HospitalDrugAssignment {
+  hospitalId: string;
+  enabled: boolean;
+  notes?: string;
+  hospitalSpecificFormulationIds?: string[];
+}
+
 export interface Drug {
   id: string;
   genericName: string;
@@ -219,6 +301,17 @@ export interface Drug {
   images: DrugImageRef[];
   monographSections: MonographSection[];
   relatedResourceIds: string[];
+  /**
+   * Structured medication references with per-item Private/Public visibility.
+   * Legacy free-text dosing/document `references` fields are unrelated and stay as-is.
+   * Private items remain in the local workspace only and are stripped from public exports.
+   */
+  references: DrugReference[];
+  /**
+   * Per-hospital ON/OFF inclusion in each hospital’s formulary view.
+   * New drugs default to all hospitals OFF. One master record — never duplicate drugs per hospital.
+   */
+  hospitalAssignments: HospitalDrugAssignment[];
   feeApplicable: boolean | null;
   lastUpdated: string;
   lastReviewedAt: string;
@@ -227,6 +320,9 @@ export interface Drug {
   /** Author / owner of the working draft. */
   authorId?: string;
   authorLabel?: string;
+  /** Administrator who last approved & published (when known). */
+  reviewerId?: string;
+  reviewerLabel?: string;
   /** Published revision kept public while a new draft is under review. */
   publishedSnapshot?: {
     genericName: string;
@@ -236,6 +332,8 @@ export interface Drug {
     alertClassification: MedicationAlertClassification;
     publishedAt: string;
     version: string;
+    /** Approved Public references only, when snapshotted. */
+    references?: DrugReference[];
   } | null;
   reviewHistory?: ReviewHistoryEntry[];
   reviewNote?: string;
@@ -276,6 +374,11 @@ export interface LibraryDocument {
   attachments: ResourceAttachment[];
   externalLinks: ResourceLink[];
   relatedDrugIds: string[];
+  /**
+   * Optional hospital scope. Empty/undefined = cluster-wide (all hospitals).
+   * When set, only those hospital IDs see the published document.
+   */
+  hospitalIds?: string[];
   authorId?: string;
   authorLabel?: string;
   reviewHistory?: ReviewHistoryEntry[];
@@ -341,6 +444,8 @@ export interface AuditLogEntry {
   targetId: string;
   targetLabel: string;
   actorLabel: string;
+  /** Stable user id when known; omit for legacy/unattributed events. */
+  actorId?: string;
   timestamp: string;
   note?: string;
 }
@@ -350,7 +455,7 @@ export interface SearchCount {
   count: number;
 }
 
-export type AuthMode = 'local' | 'supabase';
+export type AuthMode = 'local';
 
 export interface AuthSession {
   userId: string;
@@ -376,6 +481,8 @@ export interface ContentState {
   education: LibraryDocument[];
   chemotherapy: LibraryDocument[];
   therapeuticClasses: TherapeuticClass[];
+  /** Editable cluster hospitals (welcome cards + assignment targets). */
+  hospitals: Hospital[];
   sections: HomepageSection[];
   media: MediaRecord[];
   audit: AuditLogEntry[];

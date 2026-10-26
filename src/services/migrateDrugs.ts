@@ -1,10 +1,14 @@
 import { createDefaultMonographSections, emptyRichDoc } from '@/config/monograph';
 import { newId } from '@/lib/format';
+import { normalizeDrugReferences } from '@/services/drugReferences';
+import { migrateHospitals } from '@/services/hospitals';
 import { normalizeSectionPublication } from '@/services/sectionPublication';
 import type {
   ContentState,
   Drug,
   DrugFormulation,
+  DrugReference,
+  HospitalDrugAssignment,
   LibraryDocument,
   MedicationAlertClassification,
   MonographSection,
@@ -44,7 +48,8 @@ type LegacyDrug = {
   safety?: string;
   monitoring?: string;
   compatibility?: string;
-  references?: string;
+  /** Legacy free-text dosing references, or structured DrugReference[] when already migrated. */
+  references?: string | DrugReference[];
   safetyFlags?: SafetyFlag[];
   monographSections?: MonographSection[];
   images?: Drug['images'];
@@ -58,6 +63,7 @@ type LegacyDrug = {
   lastReviewedAt?: string;
   lastUpdated?: string;
   mergedFromIds?: string[];
+  hospitalAssignments?: HospitalDrugAssignment[];
 };
 
 function asFormulations(legacy: LegacyDrug): DrugFormulation[] {
@@ -117,7 +123,7 @@ export function normalizeDrug(raw: LegacyDrug): Drug {
           safety: raw.safety,
           monitoring: raw.monitoring,
           compatibility: raw.compatibility,
-          references: raw.references,
+          references: typeof raw.references === 'string' ? raw.references : '',
         },
       });
 
@@ -147,6 +153,9 @@ export function normalizeDrug(raw: LegacyDrug): Drug {
     images: Array.isArray(raw.images) ? raw.images : [],
     monographSections,
     relatedResourceIds: raw.relatedResourceIds ?? [],
+    // Never promote legacy free-text strings to Public structured references.
+    references: normalizeDrugReferences(Array.isArray(raw.references) ? raw.references : [], raw.id),
+    hospitalAssignments: Array.isArray(raw.hospitalAssignments) ? raw.hospitalAssignments : [],
     feeApplicable: raw.feeApplicable ?? null,
     lastUpdated: raw.lastUpdated ?? new Date().toISOString().slice(0, 10),
     lastReviewedAt: raw.lastReviewedAt ?? raw.lastUpdated ?? new Date().toISOString().slice(0, 10),
@@ -281,14 +290,15 @@ export function normalizeDocument(raw: Partial<LibraryDocument> & { id: string; 
 }
 
 export function migrateContentCollections(state: ContentState): ContentState {
-  return {
+  return migrateHospitals({
     ...state,
+    hospitals: state.hospitals ?? [],
     drugs: migrateDrugs(state.drugs as unknown as LegacyDrug[]),
     protocols: state.protocols.map((item) => normalizeDocument(item)),
     guidelines: state.guidelines.map((item) => normalizeDocument(item)),
     education: state.education.map((item) => normalizeDocument(item)),
     chemotherapy: (state.chemotherapy ?? []).map((item) => normalizeDocument(item)),
-  };
+  });
 }
 
 export function formatFormulationLine(form: DrugFormulation): string {

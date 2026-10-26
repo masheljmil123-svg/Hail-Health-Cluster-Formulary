@@ -1,34 +1,71 @@
-import { Menu, UserRound, X } from 'lucide-react';
+import { LogOut, Menu, RefreshCcw, UserRound, X } from 'lucide-react';
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
-import { site } from '@/config/site';
-import { useAuth } from '@/hooks/useAuth';
-import { cn } from '@/lib/cn';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { ClusterLogo } from '@/components/brand/ClusterLogo';
-
-const links = [
-  { to: '/', label: 'Home', end: true },
-  { to: '/about', label: 'About' },
-  { to: '/resources', label: 'Resources' },
-  { to: '/help', label: 'Help' },
-];
+import { isLocalAdminEnabled } from '@/config/runtime';
+import { site } from '@/config/site';
+import { homePathForRole } from '@/config/roleHome';
+import { useAuth } from '@/hooks/useAuth';
+import { useOptionalHospital } from '@/hooks/useHospital';
+import { cn } from '@/lib/cn';
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
-  const { session } = useAuth();
+  const { session, signOut } = useAuth();
+  const navigate = useNavigate();
+  const hospitalCtx = useOptionalHospital();
+  const showAuthEntry = isLocalAdminEnabled();
+  const homePath = hospitalCtx ? hospitalCtx.path('/') : '/';
+  const workspaceHome = session ? homePathForRole(session.role) : '/login';
+  const authLabel = !session
+    ? 'Login'
+    : session.role === 'administrator'
+      ? 'Admin'
+      : session.role === 'team_member'
+        ? 'Workspace'
+        : 'Staff';
+
+  const links = hospitalCtx
+    ? [
+        { to: hospitalCtx.path('/'), label: 'Home', end: true },
+        { to: hospitalCtx.path('/about'), label: 'About' },
+        { to: hospitalCtx.path('/resources'), label: 'Resources' },
+        { to: hospitalCtx.path('/help'), label: 'Help' },
+      ]
+    : [
+        { to: '/', label: 'Home', end: true },
+        { to: '/about', label: 'About' },
+        { to: '/resources', label: 'Resources' },
+        { to: '/help', label: 'Help' },
+      ];
+
+  async function logout() {
+    await signOut();
+    setOpen(false);
+    navigate('/');
+  }
 
   return (
     <header className="sticky top-0 z-40 border-b border-line/80 bg-white/95 shadow-header backdrop-blur">
-      <div className="mx-auto flex h-[76px] max-w-page items-center gap-4 px-4 sm:px-6">
-        <NavLink to="/" className="flex min-w-0 max-w-[min(100%,18rem)] items-center gap-3 sm:max-w-[22rem] md:max-w-none" onClick={() => setOpen(false)}>
+      <div className="mx-auto flex h-[76px] max-w-page items-center gap-3 px-4 sm:gap-4 sm:px-6">
+        <NavLink
+          to={homePath}
+          className="flex min-w-0 max-w-[min(100%,17rem)] items-center gap-3 sm:max-w-[22rem] md:max-w-none"
+          onClick={() => setOpen(false)}
+        >
           <ClusterLogo className="h-11 w-auto shrink-0 sm:h-12" />
           <span className="hidden h-8 w-px shrink-0 bg-line sm:block" aria-hidden="true" />
-          <span className="min-w-0 font-serif text-[13px] font-semibold leading-snug text-navy sm:text-[15px] md:text-[16px]">
-            {site.platformName}
+          <span className="min-w-0 leading-snug">
+            <span className="block truncate font-serif text-[13px] font-semibold text-navy sm:text-[15px] md:text-[16px]">
+              {site.platformName}
+            </span>
+            {hospitalCtx && (
+              <span className="block truncate text-[11px] text-primary sm:text-xs">{hospitalCtx.hospital.nameEn}</span>
+            )}
           </span>
         </NavLink>
 
-        <nav className="ml-auto hidden items-center gap-7 text-[15px] text-ink lg:flex" aria-label="Primary">
+        <nav className="ml-auto hidden items-center gap-5 text-[15px] text-ink lg:flex xl:gap-7" aria-label="Primary">
           {links.map((link) => (
             <NavLink
               key={link.to}
@@ -44,14 +81,38 @@ export function SiteHeader() {
               {link.label}
             </NavLink>
           ))}
-          <span className="h-6 w-px bg-line" />
-          <NavLink
-            to={session ? '/admin' : '/login'}
-            className="inline-flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-medium text-navy transition hover:border-primary/40 hover:bg-clinical"
-          >
-            <UserRound size={16} />
-            {session ? 'Admin' : 'Login'}
-          </NavLink>
+          {hospitalCtx && (
+            <NavLink
+              to="/"
+              className="inline-flex items-center gap-2 rounded-full border border-line px-3 py-2 text-sm font-medium text-navy transition hover:border-primary/40 hover:bg-clinical"
+            >
+              <RefreshCcw size={14} />
+              Change Hospital
+            </NavLink>
+          )}
+          {showAuthEntry && (
+            <>
+              <span className="h-6 w-px bg-line" />
+              {session?.role === 'staff' ? (
+                <button
+                  type="button"
+                  onClick={() => void logout()}
+                  className="inline-flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-medium text-navy transition hover:border-primary/40 hover:bg-clinical"
+                >
+                  <LogOut size={16} />
+                  Sign out
+                </button>
+              ) : (
+                <NavLink
+                  to={session ? workspaceHome : '/login'}
+                  className="inline-flex items-center gap-2 rounded-full border border-line px-4 py-2 text-sm font-medium text-navy transition hover:border-primary/40 hover:bg-clinical"
+                >
+                  <UserRound size={16} />
+                  {authLabel}
+                </NavLink>
+              )}
+            </>
+          )}
         </nav>
 
         <button
@@ -70,6 +131,7 @@ export function SiteHeader() {
         <nav id="mobile-nav" className="border-t border-line bg-white px-4 py-3 lg:hidden" aria-label="Mobile">
           <div className="mb-3 px-2">
             <p className="font-serif text-base font-semibold leading-snug text-navy">{site.platformName}</p>
+            {hospitalCtx && <p className="text-sm text-primary">{hospitalCtx.hospital.nameEn}</p>}
           </div>
           {links.map((link) => (
             <NavLink
@@ -82,14 +144,36 @@ export function SiteHeader() {
               {link.label}
             </NavLink>
           ))}
-          <NavLink
-            to={session ? '/admin' : '/login'}
-            onClick={() => setOpen(false)}
-            className="mt-1 flex items-center gap-2 rounded-xl px-3 py-3 font-medium text-primary hover:bg-clinical"
-          >
-            <UserRound size={16} />
-            {session ? 'Admin' : 'Login'}
-          </NavLink>
+          {hospitalCtx && (
+            <NavLink
+              to="/"
+              onClick={() => setOpen(false)}
+              className="mt-1 flex items-center gap-2 rounded-xl px-3 py-3 font-medium text-primary hover:bg-clinical"
+            >
+              <RefreshCcw size={16} />
+              Change Hospital
+            </NavLink>
+          )}
+          {showAuthEntry &&
+            (session?.role === 'staff' ? (
+              <button
+                type="button"
+                onClick={() => void logout()}
+                className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left font-medium text-primary hover:bg-clinical"
+              >
+                <LogOut size={16} />
+                Sign out
+              </button>
+            ) : (
+              <NavLink
+                to={session ? workspaceHome : '/login'}
+                onClick={() => setOpen(false)}
+                className="mt-1 flex items-center gap-2 rounded-xl px-3 py-3 font-medium text-primary hover:bg-clinical"
+              >
+                <UserRound size={16} />
+                {authLabel}
+              </NavLink>
+            ))}
         </nav>
       )}
     </header>

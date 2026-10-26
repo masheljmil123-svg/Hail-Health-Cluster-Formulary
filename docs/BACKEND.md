@@ -1,65 +1,40 @@
-# Backend configuration — Hail Health Cluster Formulary
+# Local-first publishing (GitHub Pages)
 
-This application implements a controlled publishing workflow (draft → pending review → approve → publish).  
-Frontend route guards are **not** sufficient authorization for hospital production.
+This project is a static site. Visitors always read the **published catalog** checked into the repository.
 
-## Current runtime modes
+## Data layers
 
-| Mode | When | What works |
-|------|------|------------|
-| **Local (default)** | `VITE_SUPABASE_URL` unset | Empty library, team accounts, review workflow, in-app notifications — **this browser only** |
-| **Supabase** | URL + anon key set | Shared Postgres, Auth, Storage, RLS (apply migrations below) |
-| **Email** | Server function configured | Outgoing workflow emails (never from the browser with API keys) |
+| Layer | Location | Purpose |
+| --- | --- | --- |
+| **Published catalog** | `src/data/published/catalog.ts` | Single source of truth for GitHub Pages visitors |
+| **Local workspace** | IndexedDB (`kssh-formulary-workspace-v1`) + media blobs | Drafts, edits, attachments on one development browser |
+| **Historical SQL** | `supabase/migrations/` | Kept for reference only — not used at runtime |
 
-## Required environment variables
+## Publishing workflow
 
-### Client (Vite)
-
-```bash
-VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-key
-# Optional — only if an Edge Function / API is deployed for mail
-VITE_EMAIL_ENABLED=true
-VITE_EMAIL_FUNCTION_URL=https://YOUR_PROJECT.supabase.co/functions/v1/send-workflow-email
-```
-
-### Server / Edge Function only (never commit; never expose to the browser)
+1. Run `npm run dev` (local admin is enabled in development).
+2. Sign in to the local workspace and edit content.
+3. Mark records approved/published in the workspace (local status only).
+4. Open **Admin → Settings → Export approved catalog JSON**.
+5. Import into the repo:
 
 ```bash
-EMAIL_PROVIDER=resend   # or sendgrid | graph | smtp
-EMAIL_API_KEY=...
-EMAIL_FROM="Hail Health Cluster Formulary <noreply@hospital.example>"
-EMAIL_ADMIN_TO=pharmacy.admin@hospital.example
-PUBLIC_APP_URL=https://formulary.hospital.example
-SUPABASE_SERVICE_ROLE_KEY=...   # server only
+npm run import-catalog -- ./formulary-catalog-export-YYYY-MM-DD.json
 ```
 
-## Supabase setup
+6. Review the diff, commit, and deploy to GitHub Pages.
 
-1. Create a project that meets Hail Health Cluster / MoH data residency requirements.
-2. Apply `supabase/migrations/20260324000000_formulary_workflow.sql`.
-3. Enable Auth (email invite). Disable public self-registration for privileged roles.
-4. Create private Storage buckets for draft attachments; public read only for published object paths via signed URLs or RLS.
-5. Wire Edge Functions for:
-   - workflow email dispatch
-   - atomic publish (content row + approved version + audit in one transaction)
+Local “Publish” buttons never update GitHub or other visitors’ browsers.
 
-## Security checklist before hospital deployment
+## Admin availability
 
-- [ ] RLS policies enforce role, ownership, and publication status
-- [ ] Team members cannot set `status` to `published` / `approved` via API
-- [ ] Draft file objects are not world-readable
-- [ ] Disabled accounts cannot obtain tokens
-- [ ] Audit log written on every review action
-- [ ] Email never includes draft clinical text or private attachment URLs
-- [ ] IT / security sign-off on IdP, hosting, and backups
+- Enabled automatically with `npm run dev`.
+- Hidden in production builds unless `VITE_ENABLE_LOCAL_ADMIN=true` (local preview only — do not enable on the public Pages site).
 
-## Email events
+## Optional GitHub Pages base path
 
-1. New submission → Administrator  
-2. Changes requested → Author  
-3. Rejected → Author  
-4. Approved → Author  
-5. Published → Author  
+If the site is served from a project subpath, set:
 
-If email is not configured, the UI reports that clearly and **does not** simulate successful delivery. In-app notifications still work.
+```bash
+VITE_BASE_PATH=/your-repo-name/
+```

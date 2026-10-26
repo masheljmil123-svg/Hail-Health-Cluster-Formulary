@@ -3,12 +3,14 @@ import { FormEvent, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { DocumentAttachments } from '@/components/documents/DocumentAttachments';
 import { PENDING_REVIEW } from '@/config/site';
+import { isLocalAdminEnabled } from '@/config/runtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useContent } from '@/hooks/useContent';
+import { useHospital } from '@/hooks/useHospital';
 import { fieldOrPending, formatDate, isPending } from '@/lib/format';
 
 export function ChemotherapyProtocolsPage() {
-  const { state } = useContent();
+  const { catalog: state, path } = useHospital();
   const [params, setParams] = useSearchParams();
   const query = params.get('q') ?? '';
   const category = params.get('category') ?? 'all';
@@ -137,7 +139,7 @@ export function ChemotherapyProtocolsPage() {
           {results.map((item) => (
             <Link
               key={item.id}
-              to={`/chemotherapy-protocols/${item.id}`}
+              to={path(`/chemotherapy-protocols/${item.id}`)}
               className="panel block p-5 transition hover:-translate-y-0.5 hover:shadow-lift"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -168,18 +170,21 @@ export function ChemotherapyProtocolsPage() {
 
 export function ChemotherapyProtocolDetailPage() {
   const { id } = useParams();
-  const { state } = useContent();
+  const { catalog, path } = useHospital();
+  const { state: workspace } = useContent();
   const { allowed } = useAuth();
   const [params] = useSearchParams();
+  const preview = isLocalAdminEnabled() && params.get('preview') === '1' && allowed('content:update');
+  const state = preview ? workspace : catalog;
   const item = state.chemotherapy.find((entry) => entry.id === id);
-  const preview = params.get('preview') === '1' && allowed('content:update');
+  const listHref = path('/chemotherapy-protocols');
 
   if (!item || (item.status !== 'published' && !preview)) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
         <h1 className="font-serif text-4xl text-navy">Protocol not found</h1>
         <p className="mt-3 text-muted">This chemotherapy protocol is unpublished or does not exist.</p>
-        <Link to="/chemotherapy-protocols" className="btn-primary mt-6">
+        <Link to={listHref} className="btn-primary mt-6">
           Back to chemotherapy protocols
         </Link>
       </div>
@@ -188,7 +193,7 @@ export function ChemotherapyProtocolDetailPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-      <Link to="/chemotherapy-protocols" className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
+      <Link to={listHref} className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
         <ArrowLeft size={16} />
         Back to chemotherapy protocols
       </Link>

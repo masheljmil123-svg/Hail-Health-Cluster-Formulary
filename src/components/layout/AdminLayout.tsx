@@ -1,21 +1,18 @@
 import {
   Bell,
-  BookOpen,
+  Building2,
   ClipboardCheck,
   ExternalLink,
   FileText,
-  Images,
   Layers,
   LayoutDashboard,
   LogOut,
   Menu,
-  PanelsTopLeft,
   Pill,
   Ribbon,
   ScrollText,
   Search,
   Settings,
-  Shield,
   UserRound,
   Users,
   X,
@@ -28,25 +25,21 @@ import { useAuth } from '@/hooks/useAuth';
 import { useContent } from '@/hooks/useContent';
 import { cn } from '@/lib/cn';
 import { notificationsForUser, unreadCount } from '@/services/notifications';
-import { getSupabaseConfigStatus } from '@/services/supabaseClient';
 
 type NavItem = { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean; adminOnly?: boolean };
 
 const links: NavItem[] = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true, adminOnly: true },
-  { to: '/admin/review-requests', label: 'Review Requests', icon: ClipboardCheck, adminOnly: true },
-  { to: '/workspace', label: 'My Workspace', icon: UserRound },
   { to: '/admin/drugs', label: 'Manage Drugs', icon: Pill },
+  { to: '/admin/review-requests', label: 'Review Requests', icon: ClipboardCheck, adminOnly: true },
   { to: '/admin/therapeutic-classes', label: 'Therapeutic Classes', icon: Layers, adminOnly: true },
-  { to: '/admin/protocols', label: 'Manage Protocols', icon: FileText },
-  { to: '/admin/guidelines', label: 'Manage Guidelines', icon: BookOpen },
-  { to: '/admin/chemotherapy', label: 'Manage Chemotherapy', icon: Ribbon },
-  { to: '/admin/education', label: 'Manage Counseling Materials', icon: Users },
-  { to: '/admin/sections', label: 'Homepage Sections', icon: PanelsTopLeft, adminOnly: true },
-  { to: '/admin/media', label: 'Media Library', icon: Images, adminOnly: true },
-  { to: '/admin/users', label: 'Users & Permissions', icon: Shield, adminOnly: true },
-  { to: '/admin/activity', label: 'Activity Log', icon: ScrollText, adminOnly: true },
+  { to: '/admin/protocols', label: 'Protocols & Guidelines', icon: FileText },
+  { to: '/admin/chemotherapy', label: 'Chemotherapy Protocols', icon: Ribbon },
+  { to: '/admin/education', label: 'Patient Counseling Materials', icon: Users },
+  { to: '/admin/hospitals', label: 'Hospital Management', icon: Building2, adminOnly: true },
+  { to: '/admin/activity', label: 'Activity & Analytics', icon: ScrollText, adminOnly: true },
   { to: '/admin/settings', label: 'Settings', icon: Settings, adminOnly: true },
+  { to: '/workspace', label: 'My Workspace', icon: UserRound },
 ];
 
 export function AdminLayout() {
@@ -70,7 +63,6 @@ export function AdminLayout() {
   );
   const unread = session ? unreadCount(session.userId) : 0;
   const notifs = session ? notificationsForUser(session.userId).slice(0, 8) : [];
-  const backend = getSupabaseConfigStatus();
 
   function onSearch(event: FormEvent) {
     event.preventDefault();
@@ -82,19 +74,20 @@ export function AdminLayout() {
     navigate('/');
   }
 
-  const visibleLinks = links.filter((link) => !link.adminOnly || isAdmin);
+  const visibleLinks = links.filter((link) => {
+    if (link.to === '/workspace') return !isAdmin;
+    return !link.adminOnly || isAdmin;
+  });
 
   return (
     <div className="min-h-screen bg-canvas">
       <a href="#admin-main" className="skip-link">
         Skip to content
       </a>
-      {!backend.configured && (
-        <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs text-amber-950 sm:text-sm">
-          Multi-device team workflow requires Supabase configuration. Content and notifications are stored in this browser only.
-          See docs/BACKEND.md.
-        </div>
-      )}
+      <div className="border-b border-teal/20 bg-clinical px-4 py-2 text-center text-xs text-navy sm:text-sm">
+        Local workspace — Publish updates this browser&apos;s hospital preview. Online visitors still need a deployment from
+        Settings.
+      </div>
       <header className="sticky top-0 z-40 border-b border-line bg-white">
         <div className="flex h-[72px] items-center gap-3 px-4 lg:px-6">
           <button type="button" className="rounded-full border border-line p-2 lg:hidden" onClick={() => setOpen(true)} aria-label="Open admin menu">
@@ -182,8 +175,8 @@ export function AdminLayout() {
           <div className="fixed inset-0 z-50 bg-navy/40 lg:hidden" onClick={() => setOpen(false)}>
             <aside className="flex h-full w-[280px] flex-col bg-white" onClick={(event) => event.stopPropagation()}>
               <div className="flex items-center justify-between border-b border-line px-4 py-3">
-                <p className="text-sm font-semibold text-navy">{isAdmin ? 'Admin Panel' : 'Team Workspace'}</p>
-                <button type="button" onClick={() => setOpen(false)} aria-label="Close admin menu">
+                <span className="font-serif text-lg text-navy">Menu</span>
+                <button type="button" className="rounded-full p-2" onClick={() => setOpen(false)} aria-label="Close menu">
                   <X size={18} />
                 </button>
               </div>
@@ -191,7 +184,7 @@ export function AdminLayout() {
             </aside>
           </div>
         )}
-        <main id="admin-main" className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
+        <main id="admin-main" className="min-w-0 flex-1 overflow-x-clip px-3 py-5 sm:px-4 sm:py-6 lg:px-8">
           <Outlet />
         </main>
       </div>
@@ -200,7 +193,7 @@ export function AdminLayout() {
 }
 
 function Sidebar({
-  links: navLinks,
+  links,
   onNavigate,
   onLogout,
   isAdmin,
@@ -211,10 +204,9 @@ function Sidebar({
   isAdmin: boolean;
 }) {
   return (
-    <>
-      <p className="px-5 pb-2 pt-5 text-xs font-semibold uppercase tracking-wide text-muted">{isAdmin ? 'Admin Panel' : 'Team Panel'}</p>
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3" aria-label="Staff navigation">
-        {navLinks.map((link) => (
+    <div className="flex h-full flex-col">
+      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+        {links.map((link) => (
           <NavLink
             key={link.to}
             to={link.to}
@@ -222,26 +214,52 @@ function Sidebar({
             onClick={onNavigate}
             className={({ isActive }) =>
               cn(
-                'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-ink transition hover:bg-clinical',
-                isActive && 'bg-clinical font-semibold text-primary',
+                'flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium transition',
+                isActive ? 'bg-clinical text-navy' : 'text-muted hover:bg-canvas hover:text-navy',
               )
             }
           >
-            <link.icon size={16} />
-            {link.label}
+            <link.icon size={18} />
+            <span className="min-w-0 flex-1">{link.label}</span>
           </NavLink>
         ))}
       </nav>
-      <div className="space-y-2 border-t border-line p-4">
-        <NavLink to="/" onClick={onNavigate} className="btn-secondary w-full">
-          <ExternalLink size={15} />
-          View Public Site
-        </NavLink>
-        <button type="button" onClick={onLogout} className="btn w-full text-muted hover:bg-rose-50 hover:text-rose-700">
-          <LogOut size={15} />
-          Logout
+      <div className="space-y-2 border-t border-line p-3">
+        {isAdmin && (
+          <div className="rounded-2xl bg-clinical/70 px-3 py-2 text-xs leading-5 text-navy">
+            <p className="font-semibold">Also in Settings</p>
+            <p className="mt-1 text-muted">
+              <Link to="/admin/users" className="text-primary hover:underline" onClick={onNavigate}>
+                Users
+              </Link>
+              {' · '}
+              <Link to="/admin/media" className="text-primary hover:underline" onClick={onNavigate}>
+                Media
+              </Link>
+              {' · '}
+              <Link to="/admin/sections" className="text-primary hover:underline" onClick={onNavigate}>
+                Homepage
+              </Link>
+            </p>
+          </div>
+        )}
+        <a
+          href="/"
+          className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-muted hover:bg-canvas hover:text-navy"
+          onClick={onNavigate}
+        >
+          <ExternalLink size={18} />
+          Public site
+        </a>
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-muted hover:bg-canvas hover:text-navy"
+          onClick={onLogout}
+        >
+          <LogOut size={18} />
+          Sign out
         </button>
       </div>
-    </>
+    </div>
   );
 }

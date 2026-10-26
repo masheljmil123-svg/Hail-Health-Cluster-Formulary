@@ -2,16 +2,16 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { createEmptyState } from '@/data/seed';
 import { newId } from '@/lib/format';
 import { loadAccounts } from '@/services/accounts';
-import { getContentActorLabel } from '@/services/auditActor';
+import { getContentActorId, getContentActorLabel } from '@/services/auditActor';
 import { dispatchWorkflowEmail } from '@/services/emailNotifications';
 import { notifyAdministrators, pushNotification } from '@/services/notifications';
+import { analyzeAndPurgeDemoRecords, CONTENT_STORAGE_KEY } from '@/services/storage';
 import {
-  CONTENT_STORAGE_KEY,
-  analyzeAndPurgeDemoRecords,
-  clearContentState,
-  loadContentState,
-  saveContentState,
-} from '@/services/storage';
+  clearWorkspaceState,
+  loadWorkspaceState,
+  loadWorkspaceStateSync,
+  saveWorkspaceState,
+} from '@/services/workspaceStore';
 import { syncPrimaryClassName } from '@/services/therapeuticClasses';
 import {
   applyWorkflowTransition,
@@ -24,6 +24,7 @@ import type {
   ContentState,
   DocumentKind,
   Drug,
+  Hospital,
   HomepageSection,
   LibraryDocument,
   MediaRecord,
@@ -31,6 +32,7 @@ import type {
   ReviewAction,
   TherapeuticClass,
 } from '@/types';
+import { ensureHospitalAssignments, sortedHospitals } from '@/services/hospitals';
 
 type ItemKind = 'drug' | DocumentKind;
 
@@ -57,6 +59,9 @@ interface ContentApi {
   moveSection: (id: string, direction: -1 | 1) => void;
   addSection: (input: { title: string; description: string; linkLabel: string; linkHref: string }) => void;
   deleteSection: (id: string) => void;
+  saveHospital: (hospital: Hospital, isNew: boolean) => void;
+  deleteHospital: (id: string) => void;
+  moveHospital: (id: string, direction: -1 | 1) => void;
   updateMedia: (record: MediaRecord) => void;
   addUpload: (input: { title: string; alt: string; src: string }) => void;
   deleteUpload: (id: string) => void;
@@ -67,11 +72,14 @@ interface ContentApi {
 
 const ContentContext = createContext<ContentApi | null>(null);
 
-function makeAudit(partial: Omit<AuditLogEntry, 'id' | 'actorLabel' | 'timestamp'> & { actorLabel?: string }): AuditLogEntry {
+function makeAudit(
+  partial: Omit<AuditLogEntry, 'id' | 'actorLabel' | 'timestamp'> & { actorLabel?: string; actorId?: string },
+): AuditLogEntry {
   return {
     ...partial,
     id: newId('audit'),
     actorLabel: partial.actorLabel ?? getContentActorLabel(),
+    actorId: partial.actorId ?? getContentActorId(),
     timestamp: new Date().toISOString(),
   };
 }
@@ -102,23 +110,33 @@ function labelOf(item: Drug | LibraryDocument): string {
 }
 
 export function ContentProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<ContentState>(() => loadContentState());
+  /** Local admin workspace only — never the GitHub Pages published catalog. */
+  const [state, setState] = useState<ContentState>(() => loadWorkspaceStateSync());
+  const [hydrated, setHydrated] = useState(false);
 
-  // Re-run purge after mount so stale in-memory demo state (e.g. HMR) cannot stick.
   useEffect(() => {
-    setState(loadContentState());
+    let cancelled = false;
+    void loadWorkspaceState().then((next) => {
+      if (!cancelled) {
+        setState(next);
+        setHydrated(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
+    if (!hydrated) return;
     const { state: purged, report } = analyzeAndPurgeDemoRecords(state);
     if (report.totalRemoved > 0) {
-      // Drop confirmed demo records from React state immediately; do not re-persist them.
       setState(purged);
-      saveContentState(purged);
+      void saveWorkspaceState(purged);
       return;
     }
-    saveContentState(state);
-  }, [state]);
+    void saveWorkspaceState(state);
+  }, [state, hydrated]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -127,7 +145,7 @@ export function ContentProvider({ children }: { children: ReactNode }) {
         event.key === 'kssh-formulary-content-v2' ||
         event.key === 'kssh-formulary-content-v1'
       ) {
-        setState(loadContentState());
+        void loadWorkspaceState().then(setState);
       }
     };
     window.addEventListener('storage', onStorage);
@@ -143,6 +161,7 @@ export function ContentProvider({ children }: { children: ReactNode }) {
             {
               ...drug,
               therapeuticClassIds: Array.isArray(drug.therapeuticClassIds) ? drug.therapeuticClassIds : [],
+              hospitalAssignments: ensureHospitalAssignments(drug, current.hospitals),
             },
             current.therapeuticClasses,
           );
@@ -321,7 +340,7 @@ export function ContentProvider({ children }: { children: ReactNode }) {
                     : kind === 'guideline'
                       ? `/admin/guidelines/${id}`
                       : `/admin/protocols/${id}`;
-            const reviewHref = `/admin/review-requests/${kind}/${id}`;
+            const reviewHref = kind === 'drug' ? `/admin/drugs/${id}?review=1` : `/admin/review-requests/${kind}/${id}`;
 
             if (action === 'submit' || action === 'resubmit') {
               notifyAdministrators(loadAccounts(), {
@@ -332,14 +351,14 @@ export function ContentProvider({ children }: { children: ReactNode }) {
                 href: reviewHref,
               });
               void dispatchWorkflowEmail({
-                event: 'submission',
-                toUserId: 'administrators',
-                contentTitle: title,
-                status: 'pending-review',
-                securePath: reviewHref,
+                event: 'submitted',
+                subject: `Local review request: ${title}`,
+                body: `${title} was submitted in the local workspace.`,
               });
             } else if (existing.authorId) {
-              const authorMessages: Partial<Record<ReviewAction, { title: string; message: string; event: 'changes-requested' | 'rejected' | 'approved' | 'published' }>> = {
+              const authorMessages: Partial<
+                Record<ReviewAction, { title: string; message: string; event: 'changes-requested' | 'rejected' | 'approved' | 'published' }>
+              > = {
                 'request-changes': {
                   title: 'Changes requested',
                   message: `The administrator requested changes on “${title}”.${note ? ` Feedback: ${note}` : ''}`,
@@ -351,18 +370,18 @@ export function ContentProvider({ children }: { children: ReactNode }) {
                   event: 'rejected',
                 },
                 approve: {
-                  title: 'Submission approved',
-                  message: `Your submitted item “${title}” has been approved by the administrator.`,
+                  title: 'Submission published',
+                  message: `“${title}” was published in the local workspace preview. Online visitors still need a deployment from Settings.`,
                   event: 'approved',
                 },
                 publish: {
-                  title: 'Content published',
-                  message: `“${title}” is now published on the public library.`,
+                  title: 'Published locally',
+                  message: `“${title}” is published in this browser’s hospital preview. Settings → export is still required before GitHub Pages updates for other visitors.`,
                   event: 'published',
                 },
                 'approve-publish': {
-                  title: 'Content approved and published',
-                  message: `“${title}” was approved and published on the public library.`,
+                  title: 'Approved & published locally',
+                  message: `“${title}” is published in this browser only. Other online visitors will not see it until Settings export/import/deploy is completed.`,
                   event: 'published',
                 },
               };
@@ -378,10 +397,9 @@ export function ContentProvider({ children }: { children: ReactNode }) {
                 });
                 void dispatchWorkflowEmail({
                   event: msg.event,
-                  toUserId: existing.authorId,
-                  contentTitle: title,
-                  status: updated.status,
-                  securePath: '/workspace',
+                  toUserIds: [existing.authorId],
+                  subject: msg.title,
+                  body: msg.message,
                 });
               }
             }
@@ -500,6 +518,69 @@ export function ContentProvider({ children }: { children: ReactNode }) {
           );
         });
       },
+      saveHospital(hospital, isNew) {
+        setState((current) => {
+          const hospitals = isNew
+            ? [...current.hospitals, hospital]
+            : current.hospitals.map((item) => (item.id === hospital.id ? hospital : item));
+          const drugs = current.drugs.map((drug) => ({
+            ...drug,
+            hospitalAssignments: ensureHospitalAssignments(drug, hospitals),
+          }));
+          return withAudit(
+            { ...current, hospitals, drugs },
+            makeAudit({
+              action: isNew ? 'created' : 'updated',
+              targetType: 'hospital',
+              targetId: hospital.id,
+              targetLabel: hospital.nameEn,
+            }),
+          );
+        });
+      },
+      deleteHospital(id) {
+        setState((current) => {
+          if (current.hospitals.length <= 1) return current;
+          const hospital = current.hospitals.find((item) => item.id === id);
+          if (!hospital) return current;
+          const hospitals = current.hospitals.filter((item) => item.id !== id);
+          const drugs = current.drugs.map((drug) => ({
+            ...drug,
+            hospitalAssignments: (drug.hospitalAssignments ?? []).filter((row) => row.hospitalId !== id),
+          }));
+          return withAudit(
+            { ...current, hospitals, drugs },
+            makeAudit({
+              action: 'deleted',
+              targetType: 'hospital',
+              targetId: id,
+              targetLabel: hospital.nameEn,
+            }),
+          );
+        });
+      },
+      moveHospital(id, direction) {
+        setState((current) => {
+          const ordered = sortedHospitals(current.hospitals);
+          const index = ordered.findIndex((item) => item.id === id);
+          const target = index + direction;
+          if (index < 0 || target < 0 || target >= ordered.length) return current;
+          const copy = [...ordered];
+          const [moved] = copy.splice(index, 1);
+          copy.splice(target, 0, moved);
+          const hospitals = copy.map((item, itemIndex) => ({ ...item, displayOrder: itemIndex + 1 }));
+          return withAudit(
+            { ...current, hospitals },
+            makeAudit({
+              action: 'updated',
+              targetType: 'hospital',
+              targetId: id,
+              targetLabel: moved.nameEn,
+              note: direction < 0 ? 'Moved up' : 'Moved down',
+            }),
+          );
+        });
+      },
       updateMedia(record) {
         setState((current) => ({
           ...current,
@@ -575,17 +656,18 @@ export function ContentProvider({ children }: { children: ReactNode }) {
         });
       },
       resetDemo() {
-        clearContentState();
+        void clearWorkspaceState();
         const next = createEmptyState();
         next.audit = [
           makeAudit({
             action: 'reset',
             targetType: 'settings',
             targetId: 'library-reset',
-            targetLabel: 'Content library reset to empty',
+            targetLabel: 'Local workspace reset to empty',
           }),
         ];
         setState(next);
+        void saveWorkspaceState(next);
       },
     };
   }, [state]);

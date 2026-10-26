@@ -2,14 +2,19 @@ import { ArrowLeft, List, Printer } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import { DrugImageCarousel } from '@/components/drugs/DrugImageCarousel';
+import { PublicDrugReferences } from '@/components/drugs/PublicDrugReferences';
 import { RichTextView } from '@/components/editor/RichTextEditor';
 import { MedicationAlertBadge } from '@/components/ui/MedicationAlertBadge';
 import { SAFETY_FLAG_LABEL } from '@/config/monograph';
+import { isLocalAdminEnabled } from '@/config/runtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useContent } from '@/hooks/useContent';
+import { useHospital } from '@/hooks/useHospital';
 import { cn } from '@/lib/cn';
 import { formatDate } from '@/lib/format';
 import { isRichDocEmpty } from '@/lib/richtext';
+import { getPublicReferences } from '@/services/drugReferences';
+import { isDrugEnabledForHospital } from '@/services/hospitals';
 import { formatFormulationLine } from '@/services/migrateDrugs';
 import { collectionFor } from '@/services/library';
 import {
@@ -21,15 +26,20 @@ import type { DocumentKind, Drug, LibraryDocument, MonographSection } from '@/ty
 
 export function DrugDetailPage() {
   const { id } = useParams();
-  const { state } = useContent();
+  const { hospital, catalog, path } = useHospital();
+  const { state: workspace } = useContent();
   const { allowed } = useAuth();
   const [params] = useSearchParams();
   const location = useLocation();
   const [tocOpen, setTocOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('');
+  const preview = isLocalAdminEnabled() && params.get('preview') === '1' && allowed('content:update');
+  const state = preview ? workspace : catalog;
   const drug = state.drugs.find((item) => item.id === id);
-  const preview = params.get('preview') === '1' && allowed('content:update');
-  const back = (location.state as { search?: string } | null)?.search || `/search?q=${encodeURIComponent(drug?.genericName ?? '')}`;
+  const enabledHere = drug ? isDrugEnabledForHospital(drug, hospital.id) : false;
+  const back =
+    (location.state as { search?: string } | null)?.search ||
+    path(`/search?q=${encodeURIComponent(drug?.genericName ?? '')}`);
 
   const relatedDocs = useMemo(() => (drug ? relatedDocuments(state, drug) : []), [drug, state]);
 
@@ -44,15 +54,30 @@ export function DrugDetailPage() {
     return getPublicSections(drug, relatedDocs);
   }, [drug, preview, relatedDocs]);
 
-  const tocSections = useMemo(
-    () => [...visibleSections].sort((a, b) => a.title.localeCompare(b.title)),
-    [visibleSections],
-  );
+  const publicReferences = useMemo(() => (drug ? getPublicReferences(drug) : []), [drug]);
+
+  const tocSections = useMemo(() => {
+    const sections = [...visibleSections].sort((a, b) => a.title.localeCompare(b.title));
+    if (publicReferences.length) {
+      sections.push({
+        id: 'public-refs',
+        key: 'references',
+        title: 'References',
+        displayOrder: 9999,
+        isVisible: true,
+        contentType: 'links',
+        richText: { type: 'doc', content: [] },
+        status: 'published',
+        publishedContent: null,
+      } as MonographSection);
+    }
+    return sections;
+  }, [visibleSections, publicReferences.length]);
 
   useEffect(() => {
-    if (!visibleSections.length) return;
+    if (!tocSections.length) return;
     const observers: IntersectionObserver[] = [];
-    for (const section of visibleSections) {
+    for (const section of tocSections) {
       const element = document.getElementById(sectionAnchor(section));
       if (!element) continue;
       const observer = new IntersectionObserver(
@@ -68,18 +93,20 @@ export function DrugDetailPage() {
     }
     const hash = location.hash.replace('#', '');
     if (hash) {
-      const match = visibleSections.find((section) => sectionAnchor(section) === hash);
+      const match = tocSections.find((section) => sectionAnchor(section) === hash);
       if (match) setActiveSection(match.id);
     }
     return () => observers.forEach((observer) => observer.disconnect());
-  }, [visibleSections, location.hash]);
+  }, [tocSections, location.hash]);
 
-  if (!drug || (drug.status !== 'published' && !preview)) {
+  if (!drug || (drug.status !== 'published' && !preview) || (!preview && !enabledHere)) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
-        <h1 className="font-serif text-4xl text-navy">Medication not found</h1>
-        <p className="mt-3 text-muted">This record is unpublished or does not exist.</p>
-        <Link to="/search" className="btn-primary mt-6">
+        <h1 className="font-serif text-4xl text-navy">Medication unavailable</h1>
+        <p className="mt-3 text-muted">
+          This medication is not part of the {hospital.nameEn} formulary catalog, or it is not published.
+        </p>
+        <Link to={path('/search')} className="btn-primary mt-6">
           Back to search
         </Link>
       </div>
@@ -207,7 +234,7 @@ export function DrugDetailPage() {
                   <h2 className="drug-monograph__section-title text-navy">{section.title}</h2>
                   {preview && section.status !== 'published' && (
                     <p className="drug-monograph__meta mt-1 text-amber-800">
-                      Admin preview — section status: {section.status} (not public until Approve &amp; Publish)
+                      Admin preview — section status: {section.status} (included when the medication is Published)
                     </p>
                   )}
                   <div className="drug-monograph__section-body">
@@ -215,6 +242,7 @@ export function DrugDetailPage() {
                   </div>
                 </section>
               ))}
+              <PublicDrugReferences drug={drug} />
             </div>
           </article>
         </div>

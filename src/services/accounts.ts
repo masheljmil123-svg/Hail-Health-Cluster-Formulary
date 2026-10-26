@@ -1,5 +1,5 @@
 import { newId } from '@/lib/format';
-import type { TeamAccount } from '@/types';
+import type { ProfessionalDesignation, TeamAccount } from '@/types';
 
 const ACCOUNTS_KEY = 'kssh-formulary-accounts-v1';
 
@@ -36,6 +36,8 @@ export async function createAccount(input: {
   email: string;
   role: TeamAccount['role'];
   password: string;
+  professionalDesignation?: ProfessionalDesignation;
+  hospitalId?: string;
 }): Promise<TeamAccount> {
   const accounts = loadAccounts();
   const username = input.username.trim().toLowerCase();
@@ -54,6 +56,8 @@ export async function createAccount(input: {
     active: true,
     createdAt: new Date().toISOString(),
     passwordDigest,
+    professionalDesignation: input.professionalDesignation ?? 'unspecified',
+    hospitalId: input.hospitalId || undefined,
   };
   saveAccounts([...accounts, account]);
   return account;
@@ -81,7 +85,10 @@ export async function setAccountPassword(id: string, password: string): Promise<
   saveAccounts(next);
 }
 
-export function updateAccount(id: string, patch: Partial<Pick<TeamAccount, 'displayName' | 'email' | 'role' | 'active'>>): TeamAccount {
+export function updateAccount(
+  id: string,
+  patch: Partial<Pick<TeamAccount, 'displayName' | 'email' | 'role' | 'active' | 'professionalDesignation' | 'hospitalId'>>,
+): TeamAccount {
   const accounts = loadAccounts();
   const index = accounts.findIndex((a) => a.id === id);
   if (index < 0) throw new Error('Account not found.');

@@ -301,12 +301,18 @@ export function countPublishedSections(drug: Drug, relatedDocs: LibraryDocument[
 }
 
 export function canPublishDrug(drug: Drug, relatedDocs: LibraryDocument[] = []): { ok: boolean; reason?: string } {
-  if (countPublishedSections(drug, relatedDocs) === 0) {
+  const published = countPublishedSections(drug, relatedDocs);
+  const draftWithContent = (drug.monographSections ?? []).filter(
+    (section) => section.status !== 'published' && hasMeaningfulWorkingContent(section, drug, relatedDocs),
+  ).length;
+  if (published === 0 && draftWithContent === 0) {
     return {
       ok: false,
-      reason:
-        'Publish at least one monograph section with approved clinical content (Approve & Publish) before publishing this drug.',
+      reason: 'Add clinical content to at least one monograph section before publishing.',
     };
+  }
+  if (!drug.genericName?.trim()) {
+    return { ok: false, reason: 'Enter a generic name before publishing.' };
   }
   return { ok: true };
 }

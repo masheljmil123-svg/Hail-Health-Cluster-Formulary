@@ -1,14 +1,23 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { homePathForRole } from '@/config/roleHome';
 import { useAuth } from '@/hooks/useAuth';
 
-/** Requires an authenticated staff account (administrator or team member). */
+/**
+ * Requires an authenticated content workspace role (administrator or team member).
+ * Prototype navigation only — not genuine security enforcement.
+ */
 export function ProtectedRoute() {
   const { session, allowed } = useAuth();
   const location = useLocation();
 
-  if (!session || !allowed('content:create')) {
+  if (!session) {
     const next = `${location.pathname}${location.search}`;
     return <Navigate to={`/login?next=${encodeURIComponent(next)}`} replace />;
+  }
+
+  // General staff is read-only and uses hospital selection / public formulary routes.
+  if (session.role === 'staff' || !allowed('content:create')) {
+    return <Navigate to={homePathForRole(session.role)} replace />;
   }
 
   return <Outlet />;
@@ -25,7 +34,7 @@ export function AdminOnlyRoute() {
   }
 
   if (!allowed('content:review')) {
-    return <Navigate to="/workspace" replace />;
+    return <Navigate to={homePathForRole(session.role)} replace />;
   }
 
   return <Outlet />;

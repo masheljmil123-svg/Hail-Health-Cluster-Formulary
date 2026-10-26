@@ -1,9 +1,11 @@
+import type { LoginTab } from '@/config/testAccounts';
 import { accountsInitialized, verifyCredentials } from '@/services/accounts';
-import { getSupabaseConfigStatus, isSupabaseConfigured } from '@/services/supabaseClient';
-import type { AuthProvider, AuthSession } from '@/types';
+import type { AuthProvider, AuthSession, RoleId } from '@/types';
 
 const SESSION_KEY = 'kssh-formulary-session-v2';
 const LEGACY_SESSION_KEY = 'kssh-formulary-demo-session';
+
+const SESSION_ROLES: RoleId[] = ['administrator', 'team_member', 'staff'];
 
 function readSession(): AuthSession | null {
   try {
@@ -11,9 +13,8 @@ function readSession(): AuthSession | null {
     if (!raw) return null;
     const session = JSON.parse(raw) as AuthSession;
     if (!session?.userId || !session.role) return null;
-    if (session.role !== 'administrator' && session.role !== 'team_member') return null;
-    // Migrate legacy demo session label
-    if ((session.mode as string) === 'demo') {
+    if (!SESSION_ROLES.includes(session.role)) return null;
+    if ((session.mode as string) === 'demo' || (session.mode as string) === 'supabase') {
       session.mode = 'local';
     }
     return session;
@@ -32,24 +33,73 @@ function writeSession(session: AuthSession | null): void {
 }
 
 /**
- * Local multi-user authentication for development / single-browser testing.
- * Replace with Supabase Auth (or hospital IdP) for cross-device production use.
- * Frontend route guards are not sufficient authorization on their own.
+ * Local prototype authentication for role-based UI evaluation.
+ * Test credentials are public frontend constants — not real security.
+ * Optional legacy localStorage workspace accounts still work for admin/team.
  */
-export const localAuthProvider: AuthProvider = {
+export const localAuthProvider: AuthProvider & {
+  signInWithTab: (input: {
+    username: string;
+    password: string;
+    tab: LoginTab;
+  }) => Promise<{ session: AuthSession | null; error?: string }>;
+} = {
   id: 'local',
-  label: isSupabaseConfigured()
-    ? 'Supabase authentication (configure client wiring)'
-    : 'Local team accounts (this browser only)',
+  label: 'Local evaluation accounts (this browser only)',
   getSession() {
     return readSession();
   },
   async signIn({ username, password }) {
-    if (!accountsInitialized()) {
-      return null;
+    const result = await this.signInWithTab({ username, password, tab: 'admin-team' });
+    if (result.session) return result.session;
+    const staff = await this.signInWithTab({ username, password, tab: 'staff' });
+    return staff.session;
+  },
+  async signInWithTab({ username, password, tab }) {
+    if (!(import.meta.env.DEV || import.meta.env.VITE_ENABLE_LOCAL_ADMIN === 'true')) {
+      return { session: null, error: 'Sign-in is not available on the public website.' };
     }
+
+    const { findTestAccount } = await import('@/config/testAccounts');
+    const test = findTestAccount(username, password);
+    if (test) {
+      if (test.tab !== tab) {
+        return {
+          session: null,
+          error:
+            tab === 'staff'
+              ? 'This account belongs under Admin & Team Login. Switch tabs and try again.'
+              : 'This account belongs under General Staff Login. Switch tabs and try again.',
+        };
+      }
+      const session: AuthSession = {
+        userId: test.userId,
+        username: test.username,
+        displayName: test.displayName,
+        role: test.role,
+        mode: 'local',
+      };
+      writeSession(session);
+      return { session };
+    }
+
+    // Legacy browser-local accounts (admin/team only) — never for staff tab.
+    if (tab === 'staff') {
+      return { session: null, error: 'Credentials were not recognized.' };
+    }
+
+    if (!accountsInitialized()) {
+      return {
+        session: null,
+        error: 'Credentials were not recognized. Use the documented test accounts below.',
+      };
+    }
+
     const account = await verifyCredentials(username, password);
-    if (!account) return null;
+    if (!account) {
+      return { session: null, error: 'Credentials were not recognized, or the account is disabled.' };
+    }
+
     const session: AuthSession = {
       userId: account.id,
       username: account.username,
@@ -59,7 +109,7 @@ export const localAuthProvider: AuthProvider = {
       mode: 'local',
     };
     writeSession(session);
-    return session;
+    return { session };
   },
   async signOut() {
     writeSession(null);
@@ -67,12 +117,7 @@ export const localAuthProvider: AuthProvider = {
 };
 
 export function authStatusBanner(): string {
-  const supabase = getSupabaseConfigStatus();
-  if (supabase.configured) return supabase.message;
-  if (!accountsInitialized()) {
-    return 'No team accounts yet. Create the first administrator on the login page. Multi-device sync requires Supabase — see docs/BACKEND.md.';
-  }
-  return supabase.message;
+  return 'Prototype sign-in for role-based UI evaluation on this device. Test credentials are not real security. Local drafts stay in this browser; export approved content to update the public GitHub Pages catalog.';
 }
 
 export { localAuthProvider as demoAuthProvider };

@@ -17,24 +17,41 @@ export function collectionFor(state: ContentState, kind: DocumentKind): LibraryD
   return state.education;
 }
 
-export function publicUpdates(state: ContentState): UpdateItem[] {
+export function publicUpdates(
+  state: ContentState,
+  options?: { hospitalId?: string; basePath?: string },
+): UpdateItem[] {
+  const prefix = options?.basePath ?? '';
+  const hospitalId = options?.hospitalId;
+  const drugs = hospitalId
+    ? state.drugs.filter(
+        (item) =>
+          item.status === 'published' &&
+          (item.hospitalAssignments ?? []).some((row) => row.hospitalId === hospitalId && row.enabled),
+      )
+    : state.drugs.filter((item) => item.status === 'published');
+
   const items: UpdateItem[] = [
-    ...state.drugs
+    ...drugs.map((item) => ({
+      id: item.id,
+      kind: 'drug' as const,
+      title: item.genericName,
+      href: `${prefix}/drugs/${item.id}`,
+      lastUpdated: item.lastUpdated,
+      status: item.status,
+    })),
+    ...state.protocols
       .filter((item) => item.status === 'published')
-      .map((item) => ({
-        id: item.id,
-        kind: 'drug' as const,
-        title: item.genericName,
-        href: `/drugs/${item.id}`,
-        lastUpdated: item.lastUpdated,
-        status: item.status,
-      })),
-    ...state.protocols.filter((item) => item.status === 'published').map((item) => toUpdate(item, 'protocol', '/protocols')),
-    ...state.guidelines.filter((item) => item.status === 'published').map((item) => toUpdate(item, 'guideline', '/guidelines')),
+      .map((item) => toUpdate(item, 'protocol', `${prefix}/protocols`)),
+    ...state.guidelines
+      .filter((item) => item.status === 'published')
+      .map((item) => toUpdate(item, 'guideline', `${prefix}/guidelines`)),
     ...state.chemotherapy
       .filter((item) => item.status === 'published')
-      .map((item) => toUpdate(item, 'chemotherapy', '/chemotherapy-protocols')),
-    ...state.education.filter((item) => item.status === 'published').map((item) => toUpdate(item, 'education', '/education')),
+      .map((item) => toUpdate(item, 'chemotherapy', `${prefix}/chemotherapy-protocols`)),
+    ...state.education
+      .filter((item) => item.status === 'published')
+      .map((item) => toUpdate(item, 'education', `${prefix}/education`)),
   ];
   return items.sort((a, b) => b.lastUpdated.localeCompare(a.lastUpdated));
 }

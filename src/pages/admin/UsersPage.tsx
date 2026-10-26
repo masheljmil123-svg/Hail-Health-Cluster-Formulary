@@ -1,13 +1,21 @@
 import { FormEvent, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { permissionLabels, rolePermissions, roleSummaries } from '@/config/permissions';
+import {
+  PROFESSIONAL_DESIGNATION_LABEL,
+  isPharmacyProfessional,
+} from '@/config/professionalDesignations';
 import { useAuth } from '@/hooks/useAuth';
 import { useContent } from '@/hooks/useContent';
 import { createAccount, loadAccounts, updateAccount } from '@/services/accounts';
-import type { Permission, RoleId, TeamAccount } from '@/types';
+import { sortedHospitals } from '@/services/hospitals';
+import type { Permission, ProfessionalDesignation, RoleId, TeamAccount } from '@/types';
 
 export function UsersPage() {
   const { session, allowed } = useAuth();
   const { state } = useContent();
+  const [params, setParams] = useSearchParams();
+  const professionFilter = params.get('profession') ?? '';
   const [accounts, setAccounts] = useState<TeamAccount[]>(() => loadAccounts());
   const [form, setForm] = useState({
     username: '',
@@ -15,11 +23,14 @@ export function UsersPage() {
     email: '',
     password: '',
     role: 'team_member' as TeamAccount['role'],
+    professionalDesignation: 'unspecified' as ProfessionalDesignation,
+    hospitalId: '',
   });
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   const canManage = allowed('users:manage');
+  const hospitals = sortedHospitals(state.hospitals ?? []);
 
   const submissionsByUser = useMemo(() => {
     const map = new Map<string, number>();
@@ -35,6 +46,16 @@ export function UsersPage() {
     return map;
   }, [state]);
 
+  const visibleAccounts = useMemo(() => {
+    if (professionFilter === 'pharmacy') {
+      return accounts.filter((account) => isPharmacyProfessional(account.professionalDesignation));
+    }
+    if (professionFilter && professionFilter !== 'all') {
+      return accounts.filter((account) => (account.professionalDesignation ?? 'unspecified') === professionFilter);
+    }
+    return accounts;
+  }, [accounts, professionFilter]);
+
   async function onInvite(event: FormEvent) {
     event.preventDefault();
     setError('');
@@ -44,10 +65,21 @@ export function UsersPage() {
       return;
     }
     try {
-      await createAccount(form);
+      await createAccount({
+        ...form,
+        hospitalId: form.hospitalId || undefined,
+      });
       setAccounts(loadAccounts());
-      setMessage(`Invited ${form.username}. Share the temporary password securely out of band.`);
-      setForm({ username: '', displayName: '', email: '', password: '', role: 'team_member' });
+      setMessage(`Added local account ${form.username}. Password stays on this browser only.`);
+      setForm({
+        username: '',
+        displayName: '',
+        email: '',
+        password: '',
+        role: 'team_member',
+        professionalDesignation: 'unspecified',
+        hospitalId: '',
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invite failed.');
     }
@@ -69,16 +101,36 @@ export function UsersPage() {
     setAccounts(loadAccounts());
   }
 
-  const roles: RoleId[] = ['visitor', 'team_member', 'administrator', 'reviewer'];
+  function changeDesignation(account: TeamAccount, professionalDesignation: ProfessionalDesignation) {
+    if (!canManage) return;
+    updateAccount(account.id, { professionalDesignation });
+    setAccounts(loadAccounts());
+  }
+
+  function changeHospital(account: TeamAccount, hospitalId: string) {
+    if (!canManage) return;
+    updateAccount(account.id, { hospitalId: hospitalId || undefined });
+    setAccounts(loadAccounts());
+  }
+
+  function setProfessionFilter(value: string) {
+    const next = new URLSearchParams(params);
+    if (!value || value === 'all') next.delete('profession');
+    else next.set('profession', value);
+    setParams(next, { replace: true });
+  }
+
+  const roles: RoleId[] = ['visitor', 'staff', 'team_member', 'administrator', 'reviewer'];
   const permissions = Object.keys(permissionLabels) as Permission[];
+  const designations = Object.keys(PROFESSIONAL_DESIGNATION_LABEL) as ProfessionalDesignation[];
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="font-serif text-4xl text-navy">Users & Permissions</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-          Invite team members and assign roles. There is no public self-registration into privileged roles. When Supabase Auth is
-          configured, invitations should use secure email invites instead of browser-local passwords — see docs/BACKEND.md.
+          Local workspace accounts only — credentials stay in this browser and are not synchronized across devices. This is not a
+          secure multi-user production identity system. Professional designation is separate from application role.
         </p>
         <p className="mt-2 text-sm text-muted">
           Signed in as {session?.displayName} · {roleSummaries[session?.role ?? 'visitor'].label}
@@ -87,7 +139,7 @@ export function UsersPage() {
 
       {canManage && (
         <form onSubmit={onInvite} className="panel space-y-4 p-5">
-          <h2 className="font-serif text-2xl text-navy">Invite team member</h2>
+          <h2 className="font-serif text-2xl text-navy">Add local workspace account</h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
               <span className="ui-label">Username</span>
@@ -112,10 +164,41 @@ export function UsersPage() {
               />
             </label>
             <label className="block">
-              <span className="ui-label">Role</span>
+              <span className="ui-label">Application role</span>
               <select className="ui-input" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as TeamAccount['role'] })}>
                 <option value="team_member">Team Member / Content Editor</option>
                 <option value="administrator">Administrator / Supervisor</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="ui-label">Professional designation</span>
+              <select
+                className="ui-input"
+                value={form.professionalDesignation}
+                onChange={(e) =>
+                  setForm({ ...form, professionalDesignation: e.target.value as ProfessionalDesignation })
+                }
+              >
+                {designations.map((key) => (
+                  <option key={key} value={key}>
+                    {PROFESSIONAL_DESIGNATION_LABEL[key]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block sm:col-span-2">
+              <span className="ui-label">Hospital affiliation</span>
+              <select
+                className="ui-input"
+                value={form.hospitalId}
+                onChange={(e) => setForm({ ...form, hospitalId: e.target.value })}
+              >
+                <option value="">Not specified</option>
+                {hospitals.map((hospital) => (
+                  <option key={hospital.id} value={hospital.id}>
+                    {hospital.nameEn}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
@@ -127,32 +210,90 @@ export function UsersPage() {
         </form>
       )}
 
-      <div className="panel overflow-hidden p-0">
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="block sm:max-w-xs">
+          <span className="ui-label">Filter by profession</span>
+          <select
+            className="ui-input"
+            value={professionFilter || 'all'}
+            onChange={(e) => setProfessionFilter(e.target.value)}
+          >
+            <option value="all">All profiles</option>
+            <option value="pharmacy">Pharmacy professionals</option>
+            {designations.map((key) => (
+              <option key={key} value={key}>
+                {PROFESSIONAL_DESIGNATION_LABEL[key]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="panel overflow-x-auto p-0">
         <table className="min-w-full text-left text-sm">
           <thead className="bg-clinical/60 text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-3">User</th>
-              <th className="px-4 py-3">Role</th>
+              <th className="px-4 py-3">Professional designation</th>
+              <th className="px-4 py-3">Hospital</th>
+              <th className="px-4 py-3">App role</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Submissions</th>
               <th className="px-4 py-3">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {accounts.length === 0 && (
+            {visibleAccounts.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted">
-                  No accounts yet. Create the first administrator from the login page.
+                <td colSpan={7} className="px-4 py-8 text-center text-muted">
+                  {professionFilter
+                    ? 'No local profiles match this profession filter.'
+                    : 'No local workspace accounts yet. Evaluation sign-in uses the documented test accounts on the Login page. Optional local accounts can still be created here for this browser only.'}
                 </td>
               </tr>
             )}
-            {accounts.map((account) => (
+            {visibleAccounts.map((account) => (
               <tr key={account.id}>
                 <td className="px-4 py-3">
                   <p className="font-medium text-navy">{account.displayName}</p>
                   <p className="text-muted">
                     @{account.username} · {account.email}
                   </p>
+                </td>
+                <td className="px-4 py-3">
+                  {canManage ? (
+                    <select
+                      className="ui-input"
+                      value={account.professionalDesignation ?? 'unspecified'}
+                      onChange={(e) => changeDesignation(account, e.target.value as ProfessionalDesignation)}
+                    >
+                      {designations.map((key) => (
+                        <option key={key} value={key}>
+                          {PROFESSIONAL_DESIGNATION_LABEL[key]}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    PROFESSIONAL_DESIGNATION_LABEL[account.professionalDesignation ?? 'unspecified']
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {canManage ? (
+                    <select
+                      className="ui-input"
+                      value={account.hospitalId ?? ''}
+                      onChange={(e) => changeHospital(account, e.target.value)}
+                    >
+                      <option value="">Not specified</option>
+                      {hospitals.map((hospital) => (
+                        <option key={hospital.id} value={hospital.id}>
+                          {hospital.nameEn}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    hospitals.find((h) => h.id === account.hospitalId)?.nameEn ?? 'Not specified'
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   {canManage ? (

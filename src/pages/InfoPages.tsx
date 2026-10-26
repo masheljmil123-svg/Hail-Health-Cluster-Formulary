@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { site } from '@/config/site';
-import { useContent } from '@/hooks/useContent';
+import { useHospital } from '@/hooks/useHospital';
 import { formatDate } from '@/lib/format';
 import { publicUpdates } from '@/services/library';
 
 export function AboutPage() {
+  const { hospital } = useHospital();
   return (
     <InfoShell eyebrow="About" title={`About the ${site.platformName}`}>
       <p>
-        The {site.platformName} is the medication and clinical resource library for {site.hospitalName}, part of {site.organizationName}. Staff prepare content; only administrator-approved and published records appear publicly.
+        You are viewing the {hospital.nameEn} formulary within the {site.platformName}, part of {site.organizationName}. One
+        shared medication catalog serves multiple hospitals; each hospital only shows medications explicitly assigned to it.
       </p>
       <p>
         Nothing in this prototype is an approved formulary, protocol, dose, or hospital policy. Clinical sections that have not been supplied display “Pending clinical review”.
@@ -26,13 +28,14 @@ export function AboutPage() {
 }
 
 export function ResourcesPage() {
+  const { path } = useHospital();
   const cards = [
-    { href: '/drug-index', title: 'Drug Index A–Z', text: 'Browse published medication records alphabetically or by therapeutic class.' },
-    { href: '/protocols-guidelines', title: 'Protocols & Guidelines', text: 'Open published protocol and guideline documents.' },
-    { href: '/chemotherapy-protocols', title: 'Chemotherapy Protocols', text: 'Browse published chemotherapy protocol records when available.' },
-    { href: '/education', title: 'Patient Counseling Materials', text: 'Open published patient counseling materials.' },
-    { href: '/updates', title: 'Latest Updates', text: 'See recently dated published records.' },
-    { href: '/search', title: 'Search', text: 'Search by drug name, class, indication, or keyword.' },
+    { href: path('/drug-index'), title: 'Drug Index A–Z', text: 'Browse published medication records alphabetically or by therapeutic class.' },
+    { href: path('/protocols-guidelines'), title: 'Protocols & Guidelines', text: 'Open published protocol and guideline documents.' },
+    { href: path('/chemotherapy-protocols'), title: 'Chemotherapy Protocols', text: 'Browse published chemotherapy protocol records when available.' },
+    { href: path('/education'), title: 'Patient Counseling Materials', text: 'Open published patient counseling materials.' },
+    { href: path('/updates'), title: 'Latest Updates', text: 'See recently dated published records.' },
+    { href: path('/search'), title: 'Search', text: 'Search by drug name, class, indication, or keyword.' },
   ];
   return (
     <InfoShell eyebrow="Resources" title="Library resources">
@@ -55,17 +58,18 @@ export function HelpPage() {
       <p>Type a drug name, class, or keyword and press Enter or Search. Results stay on the search page until you open View details.</p>
       <h2 className="mt-6 font-serif text-2xl text-navy">Filters</h2>
       <p>Use the left-hand filters to narrow therapeutic class, formulary status, route, dosage form, and how recently a record was updated. Clear all removes those filters and keeps your query.</p>
-      <h2 className="mt-6 font-serif text-2xl text-navy">Demonstration sign-in</h2>
+      <h2 className="mt-6 font-serif text-2xl text-navy">Content updates</h2>
       <p>
-        Staff sign in from <Link className="text-primary hover:underline" to="/login">Login</Link>. The first visit creates an administrator account. Team members are invited from Admin → Users. Multi-device sync requires Supabase (see docs/BACKEND.md).
+        Visitors always see the repository-published catalog. Editors prepare drafts locally (development workspace), export
+        approved JSON from Settings, import it into the repo, then commit and deploy to GitHub Pages.
       </p>
     </InfoShell>
   );
 }
 
 export function UpdatesPage() {
-  const { state } = useContent();
-  const items = publicUpdates(state);
+  const { hospital, catalog, path } = useHospital();
+  const items = publicUpdates(catalog, { hospitalId: hospital.id, basePath: path('') });
   return (
     <InfoShell eyebrow="Updates" title="Latest updates">
       <p>Dates below are calculated from published records in the library.</p>
@@ -90,7 +94,7 @@ export function NotFoundPage() {
     <InfoShell eyebrow="404" title="Page not found">
       <p>That address is not part of the {site.platformName}.</p>
       <Link to="/" className="btn-primary mt-4">
-        Return home
+        Change hospital
       </Link>
     </InfoShell>
   );

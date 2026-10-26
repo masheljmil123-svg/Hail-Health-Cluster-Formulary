@@ -4,26 +4,37 @@ import { useSearchParams } from 'react-router-dom';
 import { FilterSidebar } from '@/components/search/FilterSidebar';
 import { HeroSearch } from '@/components/search/HeroSearch';
 import { ResultCard } from '@/components/search/ResultCard';
+import { isLocalAdminEnabled } from '@/config/runtime';
 import { site } from '@/config/site';
 import { useContent } from '@/hooks/useContent';
+import { useHospital } from '@/hooks/useHospital';
+import { drugsForHospital } from '@/services/hospitals';
 import { applyFilters, emptyFilters, matchDrugs, readFilters, sortResults, writeSearchParams } from '@/services/search';
 import type { SearchFilters, SortKey } from '@/types';
 
 export function SearchPage() {
   const [params, setParams] = useSearchParams();
-  const { state, toggleSavedSearch } = useContent();
+  const { hospital, catalog, path } = useHospital();
+  const workspace = useContent();
   const query = params.get('q') ?? '';
   const filters = readFilters(params);
   const [notice, setNotice] = useState('');
-  const hero = state.sections.find((section) => section.kind === 'hero');
+  const hero = catalog.sections.find((section) => section.kind === 'hero');
+  const canSaveLocally = isLocalAdminEnabled();
+  const saved =
+    canSaveLocally &&
+    workspace.state.savedSearches.some((item) => item.toLowerCase() === query.trim().toLowerCase());
 
-  const matched = useMemo(() => matchDrugs(state.drugs, query), [state.drugs, query]);
+  const hospitalDrugs = useMemo(
+    () => drugsForHospital(catalog.drugs, hospital.id),
+    [catalog.drugs, hospital.id],
+  );
+  const matched = useMemo(() => matchDrugs(hospitalDrugs, query), [hospitalDrugs, query]);
   const filtered = useMemo(
-    () => applyFilters(matched, filters, new Date(), state.therapeuticClasses),
-    [matched, filters, state.therapeuticClasses],
+    () => applyFilters(matched, filters, new Date(), catalog.therapeuticClasses),
+    [matched, filters, catalog.therapeuticClasses],
   );
   const results = useMemo(() => sortResults(filtered, filters.sort, Boolean(query.trim())), [filtered, filters.sort, query]);
-  const saved = state.savedSearches.some((item) => item.toLowerCase() === query.trim().toLowerCase());
 
   function updateFilters(next: SearchFilters) {
     setParams(writeSearchParams(query, next), { replace: true });
@@ -61,6 +72,7 @@ export function SearchPage() {
       <HeroSearch
         density="compact"
         showIntro={hero?.visible !== false}
+        hospitalName={hospital.nameEn}
         subtitle={hero?.description || site.tagline}
         placeholder={hero?.searchPlaceholder || site.searchPlaceholder}
         popular={hero?.visible === false ? [] : hero?.popularSearches ?? []}
@@ -83,13 +95,22 @@ export function SearchPage() {
                 {results.length} {results.length === 1 ? 'result' : 'results'}
                 {query.trim() ? ` for “${query.trim()}”` : ''}
               </h2>
-              <p className="mt-1 text-sm text-muted">Demonstration records. Not approved for clinical use.</p>
+              <p className="mt-1 text-sm text-muted">
+                Showing medications assigned to {hospital.nameEn}. Not a live stock list.
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" className="btn-secondary" onClick={() => query.trim() && toggleSavedSearch(query.trim())} disabled={!query.trim()}>
-                <Bookmark size={15} />
-                {saved ? 'Saved' : 'Save'}
-              </button>
+              {canSaveLocally && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => query.trim() && workspace.toggleSavedSearch(query.trim())}
+                  disabled={!query.trim()}
+                >
+                  <Bookmark size={15} />
+                  {saved ? 'Saved' : 'Save'}
+                </button>
+              )}
               <button type="button" className="btn-secondary" onClick={share}>
                 <Share2 size={15} />
                 Share
@@ -123,7 +144,9 @@ export function SearchPage() {
           {results.length === 0 ? (
             <div className="panel px-6 py-16 text-center">
               <h3 className="font-serif text-2xl text-navy">No medications available yet.</h3>
-              <p className="mt-2 text-sm text-muted">Approved medications will appear here once published.</p>
+              <p className="mt-2 text-sm text-muted">
+                Only medications explicitly assigned to {hospital.nameEn} and published in the catalog appear here.
+              </p>
               <p className="mt-4 text-sm text-muted">No medications match this search.</p>
               <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
                 Try another drug name, class, or keyword, or clear the filters.
@@ -131,6 +154,11 @@ export function SearchPage() {
               <button type="button" className="btn-primary mt-5" onClick={() => updateFilters(emptyFilters())}>
                 Clear filters
               </button>
+              <p className="mt-4 text-xs text-muted">
+                <a className="text-primary hover:underline" href={path('/')}>
+                  Return to {hospital.nameEn} home
+                </a>
+              </p>
             </div>
           ) : (
             <div className="space-y-3">

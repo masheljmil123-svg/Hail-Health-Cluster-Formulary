@@ -4,9 +4,7 @@ import type { AppNotification, ContentKind } from '@/types';
 const NOTIFICATIONS_KEY = 'kssh-formulary-notifications-v1';
 
 /**
- * Persistent notification store.
- * When Supabase is configured, replace this with the `notifications` table
- * so messages sync across devices for the same user account.
+ * Local-only notification store for the development workspace (this browser).
  */
 export function loadNotifications(): AppNotification[] {
   try {

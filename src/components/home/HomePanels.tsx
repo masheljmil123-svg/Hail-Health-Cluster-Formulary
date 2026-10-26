@@ -1,5 +1,6 @@
 import { ArrowUpRight, BookOpen, BookOpenCheck, FileText, Pill, Ribbon, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useOptionalHospital } from '@/hooks/useHospital';
 import { kindLabels, type UpdateItem } from '@/services/library';
 import type { FeatureAccent, FeatureIcon, HomepageSection, SearchCount } from '@/types';
 import { formatDate } from '@/lib/format';
@@ -96,6 +97,7 @@ export function UpdatesPanel({ section, items }: { section: HomepageSection; ite
 }
 
 export function TrendingPanel({ section, counts }: { section: HomepageSection; counts: SearchCount[] }) {
+  const hospital = useOptionalHospital();
   const top = [...counts].sort((a, b) => b.count - a.count).slice(0, 5);
   const max = Math.max(...top.map((item) => item.count), 1);
   return (
@@ -109,7 +111,10 @@ export function TrendingPanel({ section, counts }: { section: HomepageSection; c
           <li key={item.term} className="grid grid-cols-[auto_1fr_auto] items-center gap-3">
             <span className="w-5 text-sm font-semibold text-muted">{index + 1}</span>
             <div>
-              <Link to={`/search?q=${encodeURIComponent(item.term)}`} className="text-sm font-medium text-navy hover:text-primary">
+              <Link
+                to={hospital ? `${hospital.path('/search')}?q=${encodeURIComponent(item.term)}` : `/search?q=${encodeURIComponent(item.term)}`}
+                className="text-sm font-medium text-navy hover:text-primary"
+              >
                 {item.term}
               </Link>
               <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-slate-100">

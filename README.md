@@ -1,34 +1,14 @@
 # King Salman Specialist Hospital — Hail Health Cluster Formulary
 
-Frontend for the **Hail Health Cluster Formulary** at **King Salman Specialist Hospital**, part of **Hail Health Cluster**. Clinicians can browse and search medication records, protocols, guidelines, and patient education materials. Administrators can manage that content from a protected dashboard.
+Static website for the **Hail Health Cluster Formulary** at **King Salman Specialist Hospital**, part of **Hail Health Cluster**. Visitors browse the repository-published medication and clinical resource catalog on GitHub Pages.
 
-This is a local prototype. Sample records are **not approved for clinical use**.
+**Live site:** https://masheljmil123-svg.github.io/KSSH-Formulary-Library/
 
 ## Technologies
 
-- React 18
-- Vite
-- TypeScript
-- Tailwind CSS
-- React Router
-- Lucide React
-- LocalStorage for demonstration persistence
-
-## Project structure
-
-```text
-src/
-  components/     Shared UI, header, search, admin tables
-  pages/          Public and administrator screens
-  hooks/          Authentication and content state
-  services/       Search, storage, demo auth
-  data/           Sample library seed
-  config/         Hospital names, image paths, permissions
-  types/          TypeScript interfaces
-public/assets/    Hospital photographs and Hail Health Cluster logo
-```
-
-Branding and image paths are centralized in `src/config/site.ts` and `src/config/siteAssets.ts`. Replace files under `public/assets/` without changing page layouts.
+- React 18 + Vite + TypeScript + Tailwind CSS
+- Published catalog in `src/data/published/`
+- Local admin workspace via IndexedDB (development only)
 
 ## Setup
 
@@ -36,33 +16,36 @@ Requires Node.js 18 or later.
 
 ```bash
 npm install
-```
-
-## Run locally
-
-```bash
 npm run dev
 ```
 
-Open the address Vite prints, typically `http://localhost:5173`.
-
-Production build:
+Production build (public catalog only — admin routes disabled):
 
 ```bash
 npm run build
 npm run preview
 ```
 
-## Demonstration sign-in
+GitHub Pages build uses base path `/KSSH-Formulary-Library/` (set in `.github/workflows/deploy-github-pages.yml`).
 
-The login page uses a labeled **DEMO authentication mode**. It stays in the browser, is not secure, and is not connected to hospital systems.
+## Publishing content
 
-- Username: `administrator`
-- Password: `formulary-demo`
+1. Edit drafts in the local admin workspace (`npm run dev` → Login).
+2. Approve records, then **Settings → Export approved catalog JSON**.
+3. Import into the repository:
+
+```bash
+npm run import-catalog -- ./formulary-catalog-export-YYYY-MM-DD.json
+```
+
+4. Commit `src/data/published/catalog.ts` and push to `main`. GitHub Actions rebuilds and updates the same Pages URL.
+
+Local Publish actions do **not** update GitHub automatically. See `docs/BACKEND.md`.
 
 ## Notes
 
-- Public visitors can search published demonstration records.
-- Medication details open on a separate page after a result is selected.
-- Administrator changes persist in this browser through LocalStorage.
-- A production deployment needs a server-side identity provider, server-enforced authorization, and a real content database.
+- Public pages always read the version-controlled published catalog.
+- Local drafts never appear for other visitors until exported, committed, and deployed.
+- Phase 3 medication drafts stay local until supervisor clinical verification.
+- Branding lives in `src/config/site.ts` and `src/config/siteAssets.ts`.
+- Private medication references and IndexedDB files are never included in the public build.

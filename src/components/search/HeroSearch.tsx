@@ -1,76 +1,112 @@
 import { ArrowRight, Search, X } from 'lucide-react';
-import { FormEvent, useEffect, useState } from 'react';
+import { type CSSProperties, type FormEvent, useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { HospitalPhoto } from '@/components/brand/HospitalPhoto';
-import { HeroArt } from '@/components/home/HeroArt';
+import { resolveHospitalHeroVisual } from '@/config/hospitalHero';
+import { isLocalAdminEnabled } from '@/config/runtime';
 import { site } from '@/config/site';
 import { useContent } from '@/hooks/useContent';
+import { useHospital } from '@/hooks/useHospital';
 
 export function HeroSearch({
   density = 'home',
   showIntro = true,
+  hospitalName,
   subtitle,
   placeholder,
   popular = [],
 }: {
   density?: 'home' | 'compact';
   showIntro?: boolean;
+  hospitalName?: string;
   subtitle: string;
   placeholder: string;
   popular?: string[];
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { path, hospital } = useHospital();
   const { recordSearch } = useContent();
   const [value, setValue] = useState(() => new URLSearchParams(location.search).get('q') ?? '');
+  const [photoMissing, setPhotoMissing] = useState(false);
   const showPopular = density !== 'home' && showIntro && popular.length > 0;
+  const searchPath = path('/search');
+  const heroVisual = resolveHospitalHeroVisual(hospital);
+  const displayHospitalName = hospitalName || hospital.nameEn;
 
   useEffect(() => {
     setValue(new URLSearchParams(location.search).get('q') ?? '');
   }, [location.search]);
 
+  useEffect(() => {
+    setPhotoMissing(false);
+  }, [heroVisual.composedHeroPath]);
+
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     const query = value.trim();
-    if (query) recordSearch(query);
-    const next = new URLSearchParams(location.pathname === '/search' ? location.search : '');
+    if (query && isLocalAdminEnabled()) recordSearch(query);
+    const next = new URLSearchParams(location.pathname.endsWith('/search') ? location.search : '');
     if (query) next.set('q', query);
     else next.delete('q');
     const search = next.toString();
-    navigate({ pathname: '/search', search: search ? `?${search}` : '' });
+    navigate({ pathname: searchPath, search: search ? `?${search}` : '' });
   }
 
   return (
     <section className={density === 'home' ? 'relative pb-16' : 'relative pb-10'}>
-      <div className="absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#d4e9f7] via-[#eef6fc] to-[#e7f3fb]" />
-        <div className="absolute inset-y-0 left-0 w-[68%] sm:w-[60%]">
-          <HospitalPhoto variant="primary" decorative className="hero-photo h-full w-full" />
-        </div>
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(234,244,252,0)_0%,rgba(234,244,252,0.05)_22%,rgba(238,246,252,0.82)_42%,rgba(239,247,252,0.94)_68%,rgba(226,239,248,0.7)_100%)]" />
-        <HeroArt />
+      {/* Single pre-composited photographic hero (hospital + medication baked in) */}
+      <div className="hero-visual absolute inset-0 overflow-hidden" aria-hidden="true">
+        <div className="hero-visual__base absolute inset-0" />
+        {photoMissing ? null : (
+          <img
+            key={heroVisual.composedHeroPath}
+            src={heroVisual.composedHeroPath}
+            alt=""
+            width={2560}
+            height={760}
+            decoding="async"
+            className="hero-composed-photo absolute inset-0 h-full w-full"
+            style={
+              {
+                ['--hero-pos-mobile']: heroVisual.objectPosition,
+                ['--hero-pos-desktop']: heroVisual.objectPositionDesktop,
+              } as CSSProperties
+            }
+            onError={() => setPhotoMissing(true)}
+          />
+        )}
+        {/* Light center readability veil only — no photo blending */}
+        <div className="hero-visual__readability absolute inset-0" />
       </div>
 
       <div className={`relative z-10 mx-auto max-w-3xl px-4 text-center sm:px-6 ${density === 'home' ? 'pb-8 pt-14 md:pt-16' : 'pb-2 pt-10 md:pt-12'}`}>
         {showIntro && (
-          <>
-            {density === 'home' ? (
-              <h1 className="mx-auto max-w-[16ch] px-1 font-serif text-[1.65rem] font-semibold leading-[1.15] tracking-tight text-navy sm:max-w-none sm:text-4xl md:text-[2.65rem]">
-                {site.platformName}
-              </h1>
-            ) : (
-              <>
-                <h1 className="font-serif text-[2rem] font-semibold leading-tight text-navy sm:text-5xl">
-                  {site.hospitalName}
-                </h1>
-                <p className="mt-1 px-1 font-serif text-xl leading-snug text-navy/90 sm:text-2xl">{site.platformName}</p>
-              </>
-            )}
-            <p className={`mx-auto max-w-xl text-sm leading-6 text-ink/80 sm:text-[15px] ${density === 'home' ? 'mt-3' : 'mt-4'}`}>{subtitle}</p>
-          </>
+          <div className="hero-copy relative mx-auto max-w-[40rem]">
+            <div className="hero-copy__scrim" aria-hidden="true" />
+            <div className="relative z-[1]">
+              {density === 'home' ? (
+                <>
+                  <h1 className="hero-copy__title mx-auto max-w-[16ch] px-1 font-serif font-semibold leading-[1.15] tracking-tight sm:max-w-none">
+                    {site.platformName}
+                  </h1>
+                  {displayHospitalName && (
+                    <p className="hero-copy__hospital mt-2 font-serif">{displayHospitalName}</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <h1 className="hero-copy__title font-serif font-semibold leading-tight">
+                    {displayHospitalName || site.platformName}
+                  </h1>
+                  <p className="hero-copy__hospital mt-1 px-1 font-serif">{site.platformName}</p>
+                </>
+              )}
+              <p className={`hero-copy__subtitle mx-auto max-w-xl leading-6 ${density === 'home' ? 'mt-3' : 'mt-4'}`}>{subtitle}</p>
+            </div>
+          </div>
         )}
 
-        <form onSubmit={onSubmit} className={`mx-auto max-w-3xl ${density === 'home' ? 'mt-8' : 'mt-7'}`} role="search">
+        <form onSubmit={onSubmit} className={`relative z-[1] mx-auto max-w-3xl ${density === 'home' ? 'mt-8' : 'mt-7'}`} role="search">
           <label htmlFor="formulary-search" className="sr-only">
             Search the Hail Health Cluster Formulary
           </label>
@@ -108,8 +144,8 @@ export function HeroSearch({
                 key={term}
                 type="button"
                 onClick={() => {
-                  recordSearch(term);
-                  navigate(`/search?q=${encodeURIComponent(term)}`);
+                  if (isLocalAdminEnabled()) recordSearch(term);
+                  navigate(`${searchPath}?q=${encodeURIComponent(term)}`);
                 }}
                 className="rounded-full border border-white/80 bg-white/80 px-3 py-1 text-navy shadow-sm transition hover:bg-white"
               >

@@ -2,19 +2,23 @@ import { ArrowLeft, Layers, ListOrdered, Search } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { useContent } from '@/hooks/useContent';
+import { useHospital } from '@/hooks/useHospital';
 import { cn } from '@/lib/cn';
+import { drugsForHospital } from '@/services/hospitals';
 import { publishedDrugs } from '@/services/search';
 import {
   drugsForClass,
   findTherapeuticClass,
   publishedTherapeuticClasses,
 } from '@/services/therapeuticClasses';
+import type { ContentState } from '@/types';
 
 type IndexTab = 'az' | 'classes';
 
 export function DrugIndexPage() {
-  const { state } = useContent();
+  const { hospital, catalog } = useHospital();
+  const hospitalDrugs = drugsForHospital(catalog.drugs, hospital.id);
+  const state: ContentState = { ...catalog, drugs: hospitalDrugs };
   const [params, setParams] = useSearchParams();
   const tab: IndexTab = params.get('tab') === 'classes' ? 'classes' : 'az';
   const query = params.get('q') ?? '';
@@ -54,11 +58,11 @@ export function DrugIndexPage() {
 
   return (
     <div className="mx-auto max-w-page px-4 py-10 sm:px-6">
-      <p className="text-sm font-medium text-primary">Drug Index A–Z</p>
-      <h1 className="mt-2 font-serif text-4xl text-navy">Formulary medications</h1>
+      <p className="text-sm font-medium text-primary">Drug Index A–Z · {hospital.nameEn}</p>
+      <h1 className="mt-2 font-serif text-[clamp(1.75rem,3vw,2.25rem)] text-navy">Formulary medications</h1>
       <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
-        Browse published medications alphabetically or by therapeutic class. Only administrator-approved and published
-        records appear here.
+        Browse published medications assigned to {hospital.nameEn}, alphabetically or by therapeutic class. Assignment
+        does not indicate live pharmacy stock.
       </p>
 
       <div className="mt-8" role="tablist" aria-label="Drug index views">
@@ -151,12 +155,13 @@ function BrowseAzPanel({
   onQuery,
   onLetter,
 }: {
-  state: ReturnType<typeof useContent>['state'];
+  state: ContentState;
   query: string;
   letter: string;
   onQuery: (value: string) => void;
   onLetter: (value: string) => void;
 }) {
+  const { path } = useHospital();
   const drugs = useMemo(() => {
     const q = query.trim().toLowerCase();
     return publishedDrugs(state.drugs)
@@ -196,7 +201,7 @@ function BrowseAzPanel({
         />
       </label>
 
-      <div className="mt-6 flex flex-wrap gap-2">
+      <div className="mt-6 flex flex-wrap gap-1.5 sm:gap-2">
         <button
           type="button"
           onClick={() => onLetter('')}
@@ -211,7 +216,10 @@ function BrowseAzPanel({
           const enabled = available.has(item);
           if (!enabled) {
             return (
-              <span key={item} className="grid h-9 w-9 place-items-center rounded-full text-sm text-slate-300">
+              <span
+                key={item}
+                className="grid h-8 w-8 place-items-center rounded-full text-xs text-slate-300 sm:h-9 sm:w-9 sm:text-sm"
+              >
                 {item}
               </span>
             );
@@ -222,7 +230,7 @@ function BrowseAzPanel({
               type="button"
               onClick={() => onLetter(letter === item ? '' : item)}
               className={cn(
-                'grid h-9 w-9 place-items-center rounded-full text-sm font-semibold shadow-sm',
+                'grid h-8 w-8 place-items-center rounded-full text-xs font-semibold shadow-sm sm:h-9 sm:w-9 sm:text-sm',
                 letter === item ? 'bg-primary text-white' : 'bg-white text-navy hover:bg-clinical',
               )}
               aria-pressed={letter === item}
@@ -240,7 +248,7 @@ function BrowseAzPanel({
             <ul className="mt-3 divide-y divide-line rounded-3xl bg-white px-5 shadow-card">
               {group.items.map((drug) => (
                 <li key={drug.id}>
-                  <Link to={`/drugs/${drug.id}`} className="flex flex-wrap items-center justify-between gap-2 py-4 hover:text-primary">
+                  <Link to={path(`/drugs/${drug.id}`)} className="flex flex-wrap items-center justify-between gap-2 py-4 hover:text-primary">
                     <span>
                       <span className="block font-medium text-navy">{drug.genericName}</span>
                       <span className="text-sm text-muted">
@@ -272,12 +280,13 @@ function TherapeuticClassesPanel({
   onQuery,
   onSelectClass,
 }: {
-  state: ReturnType<typeof useContent>['state'];
+  state: ContentState;
   query: string;
   classId: string;
   onQuery: (value: string) => void;
   onSelectClass: (id: string) => void;
 }) {
+  const { path } = useHospital();
   const classes = useMemo(() => {
     const q = query.trim().toLowerCase();
     return publishedTherapeuticClasses(state.therapeuticClasses).filter((item) => {
@@ -325,7 +334,7 @@ function TherapeuticClassesPanel({
         <ul className="mt-3 divide-y divide-line rounded-3xl bg-white px-5 shadow-card">
           {medications.map((drug) => (
             <li key={drug.id}>
-              <Link to={`/drugs/${drug.id}`} className="flex flex-wrap items-center justify-between gap-3 py-4">
+              <Link to={path(`/drugs/${drug.id}`)} className="flex flex-wrap items-center justify-between gap-3 py-4">
                 <span>
                   <span className="block font-medium text-navy hover:text-primary">{drug.genericName}</span>
                   <span className="text-sm text-muted">{drug.brandNames[0] || drug.pharmacologicalClass}</span>

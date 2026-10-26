@@ -41,10 +41,26 @@ export function DocumentsAdmin({ kind }: { kind: DocumentKind }) {
   const rows = collectionFor(state, kind);
   return (
     <AdminCollection
-      title={meta.title}
-      text="Upload PDF, DOCX, or image files, or add external links. Document body text is optional. Only approved and published records appear on the public library."
+      title={kind === 'protocol' || kind === 'guideline' ? 'Protocols & Guidelines' : meta.title}
+      text="Upload PDF, DOCX, or image files, or add external links. Document body text is optional. Only published records appear on the public library."
       action={canEdit ? { to: `${meta.base}/new`, label: `Add ${meta.singular}` } : undefined}
     >
+      {(kind === 'protocol' || kind === 'guideline') && (
+        <div className="mb-4 flex flex-wrap gap-2">
+          <Link
+            to="/admin/protocols"
+            className={`rounded-full px-3 py-1.5 text-sm font-medium ${kind === 'protocol' ? 'bg-navy text-white' : 'bg-white text-navy shadow-sm'}`}
+          >
+            Protocols
+          </Link>
+          <Link
+            to="/admin/guidelines"
+            className={`rounded-full px-3 py-1.5 text-sm font-medium ${kind === 'guideline' ? 'bg-navy text-white' : 'bg-white text-navy shadow-sm'}`}
+          >
+            Guidelines
+          </Link>
+        </div>
+      )}
       {rows.length === 0 ? (
         <div className="panel p-10 text-center">
           <p className="font-serif text-2xl text-navy">No {meta.noun} yet.</p>

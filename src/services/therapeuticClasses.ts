@@ -3,12 +3,15 @@ import { publishedDrugs } from '@/services/search';
 
 const NAME_TO_ID: Record<string, string> = {
   Analgesics: 'class-analgesics',
+  'Analgesics & Antipyretics': 'class-analgesics',
   Anticoagulants: 'class-anticoagulants',
   Antidiabetics: 'class-antidiabetics',
+  'Antidiabetic Agents': 'class-antidiabetics',
   Antihypertensives: 'class-antihypertensives',
   Antimicrobials: 'class-antimicrobials',
   Antibiotics: 'class-antibiotics',
   'Antiplatelet Agents': 'class-antiplatelet',
+  Immunosuppressants: 'class-immunosuppressants',
   'Cardiovascular Drugs': 'class-cardiovascular',
   'Endocrine Drugs': 'class-endocrine',
   'Lipid-lowering Agents': 'class-lipid-lowering',
@@ -87,6 +90,11 @@ const DEFAULT_CLASS_META: Record<
     description: 'Demonstration category for gastrointestinal medications in the sample formulary.',
     subclasses: [{ id: 'sub-ppi', name: 'Proton Pump Inhibitor' }],
     order: 11,
+  },
+  'class-immunosuppressants': {
+    description: 'Directory category for immunosuppressant medications in the formulary.',
+    subclasses: [{ id: 'sub-tnf', name: 'TNF Inhibitor' }],
+    order: 12,
   },
 };
 

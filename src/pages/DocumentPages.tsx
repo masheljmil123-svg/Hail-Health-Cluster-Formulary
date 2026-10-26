@@ -3,8 +3,10 @@ import type { ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { DocumentAttachments } from '@/components/documents/DocumentAttachments';
 import { PENDING_REVIEW } from '@/config/site';
+import { isLocalAdminEnabled } from '@/config/runtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useContent } from '@/hooks/useContent';
+import { useHospital } from '@/hooks/useHospital';
 import { fieldOrPending, formatDate, isPending } from '@/lib/format';
 import { collectionFor } from '@/services/library';
 import type { DocumentKind, LibraryDocument } from '@/types';
@@ -25,7 +27,7 @@ const copy: Record<DocumentKind, { eyebrow: string; title: string; base: string 
 };
 
 export function ProtocolsGuidelinesPage() {
-  const { state } = useContent();
+  const { catalog: state, path } = useHospital();
   const protocols = collectionFor(state, 'protocol')
     .filter((item) => item.status === 'published')
     .sort((a, b) => a.title.localeCompare(b.title));
@@ -47,7 +49,7 @@ export function ProtocolsGuidelinesPage() {
         description="Therapeutic protocols and pathways."
         icon={<FileText size={18} />}
         accent="bg-[#e5f6ee] text-[#12815f]"
-        base="/protocols"
+        base={path('/protocols')}
         items={protocols}
       />
       <DocumentSection
@@ -56,7 +58,7 @@ export function ProtocolsGuidelinesPage() {
         description="Clinical practice guidelines and evidence-based resources."
         icon={<BookOpen size={18} />}
         accent="bg-[#f8efdf] text-[#c4842a]"
-        base="/guidelines"
+        base={path('/guidelines')}
         items={guidelines}
       />
     </div>
@@ -118,11 +120,12 @@ function DocumentSection({
 }
 
 export function DocumentListPage({ kind }: { kind: DocumentKind }) {
-  const { state } = useContent();
+  const { catalog: state, path } = useHospital();
   const items = collectionFor(state, kind)
     .filter((item) => item.status === 'published')
     .sort((a, b) => a.title.localeCompare(b.title));
   const meta = copy[kind];
+  const base = path(meta.base);
 
   return (
     <div className="mx-auto max-w-page px-4 py-10 sm:px-6">
@@ -139,7 +142,7 @@ export function DocumentListPage({ kind }: { kind: DocumentKind }) {
           </div>
         )}
         {items.map((item) => (
-          <Link key={item.id} to={`${meta.base}/${item.id}`} className="panel block p-5 transition hover:-translate-y-0.5 hover:shadow-lift">
+          <Link key={item.id} to={`${base}/${item.id}`} className="panel block p-5 transition hover:-translate-y-0.5 hover:shadow-lift">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="font-serif text-2xl text-navy">{item.title}</h2>
@@ -161,19 +164,22 @@ export function DocumentListPage({ kind }: { kind: DocumentKind }) {
 
 export function DocumentDetailPage({ kind }: { kind: DocumentKind }) {
   const { id } = useParams();
-  const { state } = useContent();
+  const { catalog, path } = useHospital();
+  const { state: workspace } = useContent();
   const { allowed } = useAuth();
   const [params] = useSearchParams();
   const meta = copy[kind];
+  const listHref = path(meta.base);
+  const preview = isLocalAdminEnabled() && params.get('preview') === '1' && allowed('content:update');
+  const state = preview ? workspace : catalog;
   const item = collectionFor(state, kind).find((entry) => entry.id === id);
-  const preview = params.get('preview') === '1' && allowed('content:update');
 
   if (!item || (item.status !== 'published' && !preview)) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-20 text-center">
         <h1 className="font-serif text-4xl text-navy">Record not found</h1>
         <p className="mt-3 text-muted">This record is unpublished or does not exist.</p>
-        <Link to={meta.base} className="btn-primary mt-6">
+        <Link to={listHref} className="btn-primary mt-6">
           Back to {meta.eyebrow.toLowerCase()}
         </Link>
       </div>
@@ -182,7 +188,7 @@ export function DocumentDetailPage({ kind }: { kind: DocumentKind }) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">
-      <Link to={meta.base} className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
+      <Link to={listHref} className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
         <ArrowLeft size={16} />
         Back to {meta.eyebrow.toLowerCase()}
       </Link>

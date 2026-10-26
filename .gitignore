@@ -4,6 +4,14 @@ node_modules/
 # Build output
 dist/
 
+# Local backups / QA screenshots (never deploy)
+.backup/
+
+# Private / confidential local exports
+**/private-references-*.json
+**/formulary-catalog-export*.json
+*.private.json
+
 # Environment and secrets
 .env
 .env.*

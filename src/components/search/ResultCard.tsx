@@ -3,12 +3,15 @@ import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { MedicationAlertBadge } from '@/components/ui/MedicationAlertBadge';
 import { SafetyBadges } from '@/components/ui/SafetyBadges';
+import { useHospital } from '@/hooks/useHospital';
 import { formatDate } from '@/lib/format';
 import { formulationSummary } from '@/services/search';
 import type { Drug, SafetyFlag } from '@/types';
 
 export function ResultCard({ drug, index }: { drug: Drug; index: number }) {
   const location = useLocation();
+  const { path } = useHospital();
+  const drugHref = path(`/drugs/${drug.id}`);
   const brands = drug.brandNames?.length ? drug.brandNames.join(', ') : '—';
   const formulations = formulationSummary(drug);
   const routes = [...new Set(drug.formulations.map((item) => item.route).filter(Boolean))];
@@ -21,7 +24,7 @@ export function ResultCard({ drug, index }: { drug: Drug; index: number }) {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="font-serif text-2xl text-navy">
-                <Link to={`/drugs/${drug.id}`} state={{ search: `${location.pathname}${location.search}` }} className="hover:text-primary">
+                <Link to={drugHref} state={{ search: `${location.pathname}${location.search}` }} className="hover:text-primary">
                   {drug.genericName}
                 </Link>
               </h2>
@@ -68,7 +71,7 @@ export function ResultCard({ drug, index }: { drug: Drug; index: number }) {
                 <p className="font-medium text-navy">{drug.version}</p>
               </div>
               <Link
-                to={`/drugs/${drug.id}`}
+                to={drugHref}
                 state={{ search: `${location.pathname}${location.search}` }}
                 className="inline-flex items-center gap-1 font-semibold text-primary hover:underline md:mt-4"
               >

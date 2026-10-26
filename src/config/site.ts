@@ -22,8 +22,8 @@ export const publicationStatusLabel = {
   draft: 'Draft',
   'pending-review': 'Pending Review',
   'changes-requested': 'Changes Requested',
-  rejected: 'Rejected',
-  approved: 'Approved',
+  rejected: 'Changes Requested',
+  approved: 'Published',
   published: 'Published',
   archived: 'Archived',
 } as const;
